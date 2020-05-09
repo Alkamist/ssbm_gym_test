@@ -31,13 +31,15 @@ options = dict(
     stage='battlefield',
 )
 
+device = torch.device('cuda')
+
 if platform.system() == 'Windows':
     options['windows'] = True
 
 if __name__ == "__main__":
     env = GoHighEnvVec(args.num_workers, args.total_steps, options)
 
-    net = Actor(env.observation_space.n, env.action_space.n)
+    net = Actor(env.observation_space.n, env.action_space.n).to(device)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
 
-    train(args, net, optimizer, env)
+    train(args, net, optimizer, env, device)

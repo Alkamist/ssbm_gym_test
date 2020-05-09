@@ -4,7 +4,7 @@ from torch.distributions import Categorical
 from statistics import mean, stdev
 import time
 
-def train(params, net, optimizer, env):
+def train(params, net, optimizer, env , device):
     print("Resetting envs")
     obs = env.reset()
     print("Envs resetted")
@@ -13,13 +13,13 @@ def train(params, net, optimizer, env):
     while total_steps < params.total_steps:
         print("Total steps:", total_steps)
         # print("Gathering rollouts")
-        steps, obs = gather_rollout(params, net, env, obs)
+        steps, obs = gather_rollout(params, net, env, obs, device)
         total_steps += params.num_workers * len(steps)
-        final_obs = torch.tensor(obs)
+        final_obs = torch.tensor(obs, device=device)
         _, final_values = net(final_obs)
         steps.append((None, None, None, final_values))
         # print("Processing rollouts")
-        actions, logps, values, returns, advantages = process_rollout(params, steps)
+        actions, logps, values, returns, advantages = process_rollout(params, steps, device)
 
         # print("Updating network")
         update_network(params, net, optimizer, actions, logps, values, returns, advantages)
@@ -30,32 +30,32 @@ def train(params, net, optimizer, env):
 
     env.close()
 
-def gather_rollout(params, net, env, obs):
+def gather_rollout(params, net, env, obs, device):
     steps = []
     ep_rewards = [0.] * params.num_workers
     t = time.time()
     for _ in range(params.rollout_steps):
-        obs = torch.tensor(obs)
+        obs = torch.tensor(obs, device=device)
         logps, values = net(obs)
         actions = Categorical(logits=logps).sample()
 
-        obs, rewards, dones, _ = env.step(actions.numpy())
+        obs, rewards, dones, _ = env.step(actions.cpu().numpy())
 
         for i, done in enumerate(dones):
             ep_rewards[i] += rewards[i]
 
-        rewards = torch.tensor(rewards).float().unsqueeze(1)
+        rewards = torch.tensor(rewards, device=device).float().unsqueeze(1)
         steps.append((rewards, actions, logps, values))
 
-    #print(round(time.time() - t, 3), round(mean(ep_rewards), 3), round(stdev(ep_rewards), 3))
+    print(round(time.time() - t, 3), round(mean(ep_rewards), 3), round(stdev(ep_rewards), 3))
     return steps, obs
 
-def process_rollout(params, steps):
+def process_rollout(params, steps, device):
     # bootstrap discounted returns with final value estimates
     _, _, _, last_values = steps[-1]
     returns = last_values.data
 
-    advantages = torch.zeros(params.num_workers, 1)
+    advantages = torch.zeros(params.num_workers, 1, device=device)
 
     out = [None] * (len(steps) - 1)
 

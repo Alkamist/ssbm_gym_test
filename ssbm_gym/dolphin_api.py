@@ -37,7 +37,7 @@ class DolphinAPI(Default):
   def __init__(self, **kwargs):
     Default.__init__(self, **kwargs)
 
-    self.worker_id = kwargs.get("worker_id")
+    self.worker_id = kwargs.get("worker_id") or 0
 
     #self.user = os.path.expanduser(self.user)
     self.user = self.dolphin.user

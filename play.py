@@ -5,7 +5,7 @@ from envs import GoHighEnv
 import atexit
 import platform
 
-checkpoint = torch.load(os.path.join("checkpoints", "agent.ckpt"))
+checkpoint = torch.load(os.path.join("checkpoints", "agent.ckpt"), map_location="cpu")
 
 net = checkpoint["model"]
 
@@ -15,12 +15,11 @@ options = dict(
     player2='human',
     char1='fox',
     char2='falco',
-    cpu2=1,
     stage='battlefield',
 )
 
-if platform.system == 'Windows':
-    options["windows"] = True
+if platform.system() == 'Windows':
+    options['windows'] = True
 
 env = GoHighEnv(frame_limit=7200, options=options)
 atexit.register(env.close)
