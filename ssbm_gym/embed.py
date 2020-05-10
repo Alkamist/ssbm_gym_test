@@ -30,6 +30,7 @@ class EmbedPlayer():
         s += '\thitstun_frames_left:\tFloat\n'
         s += '\tshield_size:\tFloat\n'
         s += '\tin_air:\tBool\n'
+        s += '\tjumps_used:\tInt\n'
 
         return s
 
@@ -44,7 +45,7 @@ class EmbedPlayer():
         invulnerable = 1.0 if player_state.invulnerable else 0
         hitlag_frames_left = player_state.hitlag_frames_left/10.0
         hitstun_frames_left = player_state.hitstun_frames_left/10.0
-        #jumps_used = float(player_state.jumps_used)
+        jumps_used = int(player_state.jumps_used)
         #charging_smash = 1.0 if player_state.charging_smash else 0.0
         shield_size = player_state.shield_size/100.0
         in_air = 1.0 if player_state.in_air else 0.0
@@ -61,7 +62,8 @@ class EmbedPlayer():
                 hitlag_frames_left,
                 hitstun_frames_left,
                 shield_size,
-                in_air
+                in_air,
+                jumps_used
             ]
         }
 

@@ -1,4 +1,4 @@
-from ssbm_gym.ssbm_env import BaseEnv, isDying
+from ssbm_gym.ssbm_env import BaseEnv, isDying, SSBMEnv
 from copy import deepcopy
 
 def make_env(worker_id, frame_limit, options):
@@ -41,13 +41,9 @@ class GoHighEnv(BaseEnv):
     def compute_reward(self):
         r = 0.0
         if self.prev_obs is not None:
-            # This is necesarry because the character might be dying during multiple frames
-            if not isDying(self.prev_obs.players[self.pid]) and \
-               isDying(self.obs.players[self.pid]):
+            # Punish the agent for dying.
+            if not isDying(self.prev_obs.players[self.pid]) and isDying(self.obs.players[self.pid]):
                 r -= 1.0
-
-        #     # We give a reward of -0.01 for every percent taken. The max() ensures that not reward is given when a character dies
-        #     r -= 0.01 * max(0, self.obs.players[self.pid].percent - self.prev_obs.players[self.pid].percent)
 
         r += self.obs.players[0].y / 50 / 60
         return r

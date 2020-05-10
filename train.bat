@@ -1,2 +1,2 @@
-python main.py --num-workers 8
+python main.py
 pause

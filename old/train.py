@@ -7,23 +7,19 @@ import time
 def train(params, net, optimizer, env , device):
     print("Resetting envs")
     obs = env.reset()
-    print("Envs resetted")
+    print("Envs reset")
     total_steps = 0
     n_save = 50000
+
     while total_steps < params.total_steps:
         print("Total steps:", total_steps)
-        # print("Gathering rollouts")
         steps, obs = gather_rollout(params, net, env, obs, device)
         total_steps += params.num_workers * len(steps)
         final_obs = torch.tensor(obs, device=device)
         _, final_values = net(final_obs)
         steps.append((None, None, None, final_values))
-        # print("Processing rollouts")
         actions, logps, values, returns, advantages = process_rollout(params, steps, device)
-
-        # print("Updating network")
         update_network(params, net, optimizer, actions, logps, values, returns, advantages)
-
         if total_steps > n_save:
             save_model(net, optimizer, "checkpoints/" + str(total_steps) + ".ckpt")
             n_save += 250000
@@ -34,6 +30,7 @@ def gather_rollout(params, net, env, obs, device):
     steps = []
     ep_rewards = [0.] * params.num_workers
     t = time.time()
+
     for _ in range(params.rollout_steps):
         obs = torch.tensor(obs, device=device)
         logps, values = net(obs)
@@ -47,7 +44,7 @@ def gather_rollout(params, net, env, obs, device):
         rewards = torch.tensor(rewards, device=device).float().unsqueeze(1)
         steps.append((rewards, actions, logps, values))
 
-    print(round(time.time() - t, 3), round(mean(ep_rewards), 3), round(stdev(ep_rewards), 3))
+    print("Mean reward: " + str(round(mean(ep_rewards), 3)))
     return steps, obs
 
 def process_rollout(params, steps, device):

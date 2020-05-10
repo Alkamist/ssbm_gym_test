@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class Actor(nn.Module):
     def __init__(self, obs_dim, action_dim, hidden_dim = 256):
         super(Actor, self).__init__()
@@ -14,7 +13,6 @@ class Actor(nn.Module):
         x, val = self.value(x, return_features=True)
         logp = torch.log_softmax(self.policy(x), -1)
         return logp, val
-
 
 class ResidualBlock(nn.Module):
     """Following the structure of the one implemented in
@@ -34,7 +32,6 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x):
         return x + self.mlp(x)
-
 
 class ResNet(nn.Module):
     """ResNet which maps data_dim dimensional points to an output_dim
