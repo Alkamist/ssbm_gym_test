@@ -1,10 +1,8 @@
 import random
 
-from ssbm_gym.dolphin_api import DolphinAPI
-from action_spaces import ActionSpace
-from observation_spaces import ObservationSpace
+from melee_env import MeleeEnv
 
-options = dict(
+env = MeleeEnv(
     windows=True,
     render=True,
     player1='ai',
@@ -13,14 +11,10 @@ options = dict(
     char2='falcon',
     stage='battlefield',
 )
+observation = env.reset()
 
-dolphin = DolphinAPI(**options)
-game_state = dolphin.reset()
+for _ in range(1000):
+    action = env.action_space.sample()
+    observation, reward, done, info = env.step(action)
 
-action_space = ActionSpace()
-observation_space = ObservationSpace()
-
-while True:
-    game_state = dolphin.step([action_space.sample()])
-    observation_space.update(game_state)
-    print(observation_space.n)
+env.close()

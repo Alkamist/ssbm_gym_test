@@ -30,32 +30,31 @@ def embed_player(player_state):
     shield_size = player_state.shield_size / 100.0
     in_air = 1.0 if player_state.in_air else 0.0
     #charging_smash = 1.0 if player_state.charging_smash else 0.0
-    return {
-        'character': character,
-        'action_state': action_state,
-        'percent': percent,
-        'facing': facing,
-        'x': x,
-        'y': y,
-        'action_frame': action_frame,
-        'invulnerable': invulnerable,
-        'hitlag_frames_left': hitlag_frames_left,
-        'hitstun_frames_left': hitstun_frames_left,
-        'shield_size': shield_size,
-        'in_air': in_air,
-        'jumps_used': jumps_used
-    }
+    return [
+        character,
+        action_state,
+        percent,
+        facing,
+        x,
+        y,
+        action_frame,
+        invulnerable,
+        hitlag_frames_left,
+        hitstun_frames_left,
+        shield_size,
+        in_air,
+        jumps_used
+    ]
 
 def embed_game(game_state):
     player0 = embed_player(game_state.players[0])
     player1 = embed_player(game_state.players[1])
     stage = one_hot(game_state.stage, num_stages)
-    data = {
-        'player0': player0,
-        'player1': player1,
-        'stage': stage,
-    }
-    return list(data.values())
+    return [
+        player0,
+        player1,
+        stage,
+    ]
 
 class ObservationSpace():
     def __init__(self):
@@ -69,5 +68,8 @@ class ObservationSpace():
         return self.data[n]
 
     def update(self, game_state):
-        self.data = embed_game(game_state)
-        self.n = len(self.data)
+        parsed_state = embed_game(game_state)
+        print(parsed_state)
+        #self.data = []
+        #self.data.append(parsed_state["action_state"])
+        #self.n = len(self.data)
