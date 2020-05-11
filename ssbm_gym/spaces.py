@@ -38,9 +38,6 @@ class MinimalActionSpace():
 
         return controller
 
-
-
-
 class DiagonalActionSpace():
     def __init__(self):
         self.actions = [a[0].real_controller for a in actionTypes['diagonal'].actions]
@@ -54,4 +51,3 @@ class DiagonalActionSpace():
 
     def from_index(self, n):
         return self.actions[n]
-

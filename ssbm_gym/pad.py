@@ -1,6 +1,5 @@
 import enum
 import os
-from threading import Thread
 
 @enum.unique
 class Button(enum.Enum):
@@ -28,8 +27,6 @@ class Stick(enum.Enum):
     C = 1
 
 class Pad:
-    """Writes out controller inputs."""
-
     pad_id = -1
 
     @classmethod
@@ -45,13 +42,6 @@ class Pad:
         return start_offset + self.pad_id + max_pads_per_worker * self.worker_id
 
     def __init__(self, path, tcp=False, worker_id=0):
-        """Opens the fifo. Blocks until the other end is listening.
-        Args:
-          path: Path to pipe file.
-          tcp: Whether to use zmq over tcp or a fifo. If true, the pipe file
-            is simply a text file containing the port number. The port will
-            be a hash of the path.
-        """
         self.pad_id = self.increment_pad_id()
         self.worker_id = worker_id
         self.tcp = tcp
@@ -77,7 +67,6 @@ class Pad:
         self.message = ""
 
     def __del__(self):
-        """Closes the fifo."""
         if not self.tcp:
             self.pipe.close()
 
@@ -88,35 +77,27 @@ class Pad:
 
     def flush(self):
         if self.tcp:
-            #print("sent message", self.message)
             self.socket.send_string(self.message)
         else:
             self.pipe.write(self.message)
         self.message = ""
 
     def press_button(self, button, buffering=False):
-        """Press a button."""
         assert button in Button
         self.write('PRESS {}'.format(button.name), buffering)
 
     def release_button(self, button, buffering=False):
-        """Release a button."""
         assert button in Button
         self.write('RELEASE {}'.format(button.name), buffering)
 
     def press_trigger(self, trigger, amount, buffering=False):
-        """Press a trigger. Amount is in [0, 1], with 0 as released."""
+        """Amount is in [0, 1], with 0 as released."""
         assert trigger in Trigger
-        # assert 0 <= amount <= 1
         self.write('SET {} {:.2f}'.format(trigger.name, amount), buffering)
 
     def tilt_stick(self, stick, x, y, buffering=False):
-        """Tilt a stick. x and y are in [0, 1], with 0.5 as neutral."""
+        """x and y are in [0, 1], with 0.5 as neutral."""
         assert stick in Stick
-        try:
-          assert 0 <= x <= 1 and 0 <= y <= 1
-        except AssertionError:
-          import ipdb; ipdb.set_trace()
         self.write('SET {} {:.2f} {:.2f}'.format(stick.name, x, y), buffering)
 
     def send_controller(self, controller):

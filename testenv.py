@@ -130,7 +130,7 @@ class TestEnv():
         self.pid = pid  # player id
         self.obs = None
         self.prev_obs = None
-        self._action_space = None
+        self.action_space = DiagonalActionSpace()
         self._observation_space = None
         self._embed_obs = EmbedGame(flat=True)
 
@@ -143,14 +143,6 @@ class TestEnv():
 
     def close(self):
         self.api.close()
-
-    @property
-    def action_space(self):
-        if self._action_space is not None:
-            return self._action_space
-        else:
-            self._action_space = DiagonalActionSpace()
-            return self._action_space
 
     @property
     def observation_space(self):
@@ -190,8 +182,7 @@ class TestEnv():
         if self.obs is not None:
             self.prev_obs = deepcopy(self.obs)
 
-        obs = self.api.step([self.action_space.from_index(action)])
-        self.obs = obs
+        self.obs = self.api.step([self.action_space.from_index(action)])
         reward = self.compute_reward()
         done = self.is_terminal()
         infos = dict({'frame': self.obs.frame})
