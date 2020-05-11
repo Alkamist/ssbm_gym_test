@@ -17,4 +17,7 @@ for _ in range(1000):
     action = env.action_space.sample()
     observation, reward, done, info = env.step(action)
 
+    if reward != 0.0:
+        print(reward)
+
 env.close()

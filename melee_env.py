@@ -17,6 +17,10 @@ max_shield_size = 1000.0
 max_percent = 1000.0
 max_position_offset = 20000.0
 
+def is_dying(player):
+    # see https://docs.google.com/spreadsheets/d/1JX2w-r2fuvWuNgGb6D3Cs4wHQKLFegZe2jhbBuIhCG8/edit#gid=13
+    return player.action_state <= 0xA
+
 def create_player_space():
     return gym.spaces.Dict({
         "character": gym.spaces.Discrete(num_characters),
@@ -38,6 +42,8 @@ class MeleeEnv(gym.Env):
     def __init__(self, frame_limit=100000, **kwargs):
         super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**kwargs)
+        self.ai_port = 0
+        self.opponent_port = 1
         self.frame_limit = frame_limit
         self._game_state = None
         self._previous_game_state = None
@@ -57,23 +63,51 @@ class MeleeEnv(gym.Env):
             "player1": create_player_space(),
         })
 
+    def _update_player_in_observation_space(self, player_index):
+        player_name = "player" + str(player_index)
+        self.observation_space[player_name].character = self._game_state.players[player_index].character
+        self.observation_space[player_name].action_state = self._game_state.players[player_index].action_state
+        self.observation_space[player_name].action_frame = self._game_state.players[player_index].action_frame
+        self.observation_space[player_name].position = [
+            self._game_state.players[player_index].x,
+            self._game_state.players[player_index].y
+        ]
+        self.observation_space[player_name].velocity = [
+            self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x,
+            self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y
+        ]
+        self.observation_space[player_name].percent = self._game_state.players[player_index].percent
+        self.observation_space[player_name].facing = self._game_state.players[player_index].facing
+        self.observation_space[player_name].invulnerable = self._game_state.players[player_index].invulnerable
+        self.observation_space[player_name].hitlag_frames_left = self._game_state.players[player_index].hitlag_frames_left
+        self.observation_space[player_name].hitstun_frames_left = self._game_state.players[player_index].hitstun_frames_left
+        self.observation_space[player_name].shield_size = self._game_state.players[player_index].shield_size
+        self.observation_space[player_name].in_air = self._game_state.players[player_index].in_air
+        self.observation_space[player_name].jumps_used = self._game_state.players[player_index].jumps_used
+
+    def _percent_taken(self, player_index):
+        return max(0, self._game_state.players[player_index].percent - self._previous_game_state.players[player_index].percent)
+
+    def _just_died(self, player_index):
+        return is_dying(self._game_state.players[player_index]) and not is_dying(self._previous_game_state.players[player_index])
+
     def _compute_reward(self):
         r = 0.0
 
-        #if self.prev_obs is not None:
-        #    # Punish dying.
-        #    if not isDying(self.prev_obs.players[self.pid]) and isDying(self.obs.players[self.pid]):
-        #        r -= 1.0
+        if self._previous_game_state is not None:
+            # Punish dying.
+            if self._just_died(self.ai_port):
+                r -= 1.0
 
-        #    # Punish taking percent.
-        #    r -= 0.01 * max(0, self.obs.players[self.pid].percent - self.prev_obs.players[self.pid].percent)
+            # Punish taking percent.
+            r -= 0.01 * self._percent_taken(self.ai_port)
 
-        #    # Reward killing the opponent.
-        #    if not isDying(self.prev_obs.players[1-self.pid]) and isDying(self.obs.players[1-self.pid]):
-        #        r += 1.0
+            # Reward killing the opponent.
+            if self._just_died(self.opponent_port):
+                r += 1.0
 
-        #    # Reward putting percent on the opponent.
-        #    r += 0.01 * max(0, self.obs.players[1-self.pid].percent - self.prev_obs.players[1-self.pid].percent)
+            # Reward putting percent on the opponent.
+            r += 0.01 * self._percent_taken(self.opponent_port)
 
         return r
 
@@ -91,7 +125,8 @@ class MeleeEnv(gym.Env):
         self._game_state = self.dolphin.step([self._actions[action]])
 
         self.observation_space.stage = self._game_state.stage
-        self.observation_space.player0.action_state = self._game_state.players[0].action_state
+        self._update_player_in_observation_space(0)
+        self._update_player_in_observation_space(1)
 
         reward = self._compute_reward()
         done = self._game_state.frame >= self.frame_limit
