@@ -72,10 +72,6 @@ class MeleeEnv(gym.Env):
             self._game_state.players[player_index].x,
             self._game_state.players[player_index].y
         ]
-        self.observation_space[player_name].velocity = [
-            self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x,
-            self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y
-        ]
         self.observation_space[player_name].percent = self._game_state.players[player_index].percent
         self.observation_space[player_name].facing = self._game_state.players[player_index].facing
         self.observation_space[player_name].invulnerable = self._game_state.players[player_index].invulnerable
@@ -84,6 +80,13 @@ class MeleeEnv(gym.Env):
         self.observation_space[player_name].shield_size = self._game_state.players[player_index].shield_size
         self.observation_space[player_name].in_air = self._game_state.players[player_index].in_air
         self.observation_space[player_name].jumps_used = self._game_state.players[player_index].jumps_used
+        if self._previous_game_state is not None:
+            self.observation_space[player_name].velocity = [
+                self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x,
+                self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y
+            ]
+        else:
+            self.observation_space[player_name].velocity = [0.0, 0.0]
 
     def _percent_taken(self, player_index):
         return max(0, self._game_state.players[player_index].percent - self._previous_game_state.players[player_index].percent)
@@ -111,9 +114,16 @@ class MeleeEnv(gym.Env):
 
         return r
 
+    def _update_observation_space(self):
+        self.observation_space.stage = self._game_state.stage
+        self._update_player_in_observation_space(0)
+        self._update_player_in_observation_space(1)
+
     def reset(self):
+        self._previous_game_state = None
         self._game_state = self.dolphin.reset()
-        return self._game_state
+        self._update_observation_space()
+        return self.observation_space
 
     def close(self):
         self.dolphin.close()
@@ -123,11 +133,7 @@ class MeleeEnv(gym.Env):
             self._previous_game_state = deepcopy(self._game_state)
 
         self._game_state = self.dolphin.step([self._actions[action]])
-
-        self.observation_space.stage = self._game_state.stage
-        self._update_player_in_observation_space(0)
-        self._update_player_in_observation_space(1)
-
+        self._update_observation_space()
         reward = self._compute_reward()
         done = self._game_state.frame >= self.frame_limit
 
