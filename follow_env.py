@@ -112,7 +112,7 @@ class MeleeEnv():
         #r += 0.3 / (1 + 0.1 * d)
 
         #return r
-        return 0.01 * self._game_state.players[self.ai_port].x
+        return -0.01 * self._game_state.players[self.ai_port].x
 
     def _update_observation_space(self):
         self.observation_space.data = []
@@ -148,9 +148,9 @@ NONE_stick = [
     #(.65, 0.5),
     #(1.0, 0.5),
     #(0.5, 1.0)
-    (0.5, 0.5),
-    (0.67, 0.5),
-    (0.33, 0.5),
+    #(0.5, 0.5),
+    (1.0, 0.5),
+    (0.0, 0.5),
 ]
 A_stick = [
     (0.5, 0.0),
