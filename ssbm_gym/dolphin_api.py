@@ -10,6 +10,7 @@ import os
 import time
 import random
 import functools
+import atexit
 
 from . import ssbm, state_manager, util
 from .dolphin import DolphinRunner, Player
@@ -90,6 +91,7 @@ class DolphinAPI(Default):
 
         # print('Running dolphin.')
         self.dolphin_process = self.dolphin()
+        atexit.register(self.dolphin_process.kill)
 
         self.pads = self.get_pads()
 

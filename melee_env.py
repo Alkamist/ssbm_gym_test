@@ -9,8 +9,6 @@ max_action = 0x017E
 num_actions = 1 + max_action
 num_stages = 32
 num_characters = 32
-num_player_floats = 13
-num_players = 2
 
 def is_dying(player):
     # see https://docs.google.com/spreadsheets/d/1JX2w-r2fuvWuNgGb6D3Cs4wHQKLFegZe2jhbBuIhCG8/edit#gid=13
@@ -37,8 +35,11 @@ class ActionSpace():
 
 class ObservationSpace():
     def __init__(self):
-        self.data = [0.0] * (num_stages + num_characters + num_actions + (num_player_floats * num_players))
-        self.n = len(self.data)
+        self.data = []
+
+    @property
+    def n(self):
+        return len(self.data)
 
     def sample(self):
         return random.choice(self.data)
@@ -65,22 +66,22 @@ class MeleeEnv():
 
     def _get_player_space(self, player_index):
         player_space = []
-        player_space.append(one_hot(self._game_state.players[player_index].character, num_characters))
-        player_space.append(one_hot(self._game_state.players[player_index].action_state, num_actions))
-        player_space.append(self._game_state.players[player_index].action_frame / 10.0)
-        player_space.append(self._game_state.players[player_index].x / 10.0)
-        player_space.append(self._game_state.players[player_index].y / 10.0)
+        player_space += one_hot(self._game_state.players[player_index].character, num_characters)
+        player_space += one_hot(self._game_state.players[player_index].action_state, num_actions)
+        player_space.append(self._game_state.players[player_index].action_frame / 30.0)
+        player_space.append(self._game_state.players[player_index].x / 100.0)
+        player_space.append(self._game_state.players[player_index].y / 100.0)
         player_space.append(self._game_state.players[player_index].percent / 100.0)
         player_space.append(self._game_state.players[player_index].facing)
-        player_space.append(self._game_state.players[player_index].invulnerable)
-        player_space.append(self._game_state.players[player_index].hitlag_frames_left / 10.0)
-        player_space.append(self._game_state.players[player_index].hitstun_frames_left / 10.0)
-        player_space.append(self._game_state.players[player_index].shield_size / 100.0)
+        player_space.append(1.0 if self._game_state.players[player_index].invulnerable else 0.0)
+        player_space.append(self._game_state.players[player_index].hitlag_frames_left / 30.0)
+        player_space.append(self._game_state.players[player_index].hitstun_frames_left / 30.0)
+        player_space.append(self._game_state.players[player_index].shield_size / 60.0)
         player_space.append(1.0 if self._game_state.players[player_index].in_air else 0.0)
         player_space.append(self._game_state.players[player_index].jumps_used)
         if self._previous_game_state is not None:
-            player_space.append((self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x) / 10.0)
-            player_space.append((self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y) / 10.0)
+            player_space.append((self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x) / 100.0)
+            player_space.append((self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y) / 100.0)
         else:
             player_space.append(0.0)
             player_space.append(0.0)
@@ -114,9 +115,9 @@ class MeleeEnv():
 
     def _update_observation_space(self):
         self.observation_space.data = []
-        self.observation_space.data.append(one_hot(self._game_state.stage, num_stages))
-        self.observation_space.data.append(self._get_player_space(0))
-        self.observation_space.data.append(self._get_player_space(1))
+        self.observation_space.data += one_hot(self._game_state.stage, num_stages)
+        self.observation_space.data += self._get_player_space(0)
+        self.observation_space.data += self._get_player_space(1)
 
     def reset(self):
         self._previous_game_state = None
