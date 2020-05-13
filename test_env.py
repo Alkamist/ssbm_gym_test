@@ -97,28 +97,27 @@ class MeleeEnv():
         return is_dying(self._game_state.players[player_index]) and not is_dying(self._previous_game_state.players[player_index])
 
     def _compute_reward(self):
-        #r = 0.0
+        r = 0.0
 
         #if self._previous_game_state is not None:
         #    # Punish dying.
         #    if self._just_died(self.ai_port):
         #        r -= 1.0
 
-        #x0 = self._game_state.players[self.ai_port].x
-        #y0 = self._game_state.players[self.ai_port].y
-        #x1 = self._game_state.players[self.opponent_port].x
-        #y1 = self._game_state.players[self.opponent_port].y
-        #d = sqrt((x0 - x1)**2 + (y0 - y1)**2)
-        #r += 0.3 / (1 + 0.1 * d)
+        x0 = self._game_state.players[self.ai_port].x
+        y0 = self._game_state.players[self.ai_port].y
+        x1 = self._game_state.players[self.opponent_port].x
+        y1 = self._game_state.players[self.opponent_port].y
+        d = sqrt((x0 - x1)**2 + (y0 - y1)**2)
+        r += 1.0 / (1.0 + 0.1 * d)
 
-        #return r
-        return -0.01 * self._game_state.players[self.ai_port].x
+        return r
 
     def _update_observation_space(self):
         self.observation_space.data = []
         #self.observation_space.data += one_hot(self._game_state.stage, num_stages)
         self.observation_space.data += self._get_player_space(0)
-        #self.observation_space.data += self._get_player_space(1)
+        self.observation_space.data += self._get_player_space(1)
 
     def reset(self):
         self._previous_game_state = None
@@ -141,16 +140,13 @@ class MeleeEnv():
         return self.observation_space.data, reward, done, {}
 
 NONE_stick = [
-    #(0.5, 0.5),
-    #(0.5, 0.0),
-    #(0.0, 0.5),
     #(.35, 0.5),
     #(.65, 0.5),
-    #(1.0, 0.5),
-    #(0.5, 1.0)
-    #(0.5, 0.5),
+    (0.5, 0.5),
     (1.0, 0.5),
     (0.0, 0.5),
+    (0.5, 1.0),
+    (0.5, 0.0),
 ]
 A_stick = [
     (0.5, 0.0),

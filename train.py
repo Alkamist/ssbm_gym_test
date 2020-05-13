@@ -2,7 +2,7 @@ import numpy as np
 import collections
 
 #from melee_env import MeleeEnv
-from follow_env import MeleeEnv
+from test_env import MeleeEnv
 from DQN import Agent
 
 options = dict(
@@ -19,7 +19,7 @@ options = dict(
 total_steps = 100000
 
 if __name__ == "__main__":
-    agent = Agent(state_size=2, action_size=2)
+    agent = Agent(state_size=4, action_size=5)
     rewards = collections.deque(maxlen=1000)
 
     env = MeleeEnv(frame_limit=total_steps, **options)
