@@ -1,8 +1,9 @@
+import numpy as np
+import collections
+
 #from melee_env import MeleeEnv
 from follow_env import MeleeEnv
 from DQN import Agent
-
-import time
 
 options = dict(
     windows=True,
@@ -19,6 +20,7 @@ total_steps = 100000
 
 if __name__ == "__main__":
     agent = Agent(state_size=2, action_size=2)
+    rewards = collections.deque(maxlen=1000)
 
     env = MeleeEnv(frame_limit=total_steps, **options)
     observation = env.reset()
@@ -31,10 +33,13 @@ if __name__ == "__main__":
 
         observation = next_observation
 
-        if step_count > 0 and step_count % 1000 == 0:
-            print('Step Count:', step_count, 'Reward: %.8f' % reward)
+        rewards.append(reward)
+        avg_reward = np.mean(rewards)
 
-#        #if step_count > 0 and step_count % 10000 == 0:
-#        #    agent.save("checkpoints/" + str(step_count) + ".pth")
+        if step_count > 0 and step_count % 1000 == 0:
+            print('Step Count:', step_count, 'Average Reward: %.8f' % avg_reward)
+
+        #if step_count > 0 and step_count % 10000 == 0:
+        #    agent.save("checkpoints/" + str(step_count) + ".pth")
 
     env.close()

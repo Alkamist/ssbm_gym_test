@@ -79,6 +79,15 @@ class Agent():
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_end)
         return output
 
+    def save(self, file_path):
+        torch.save(self.policy_net.state_dict(), file_path)
+
+    def load(self, file_path):
+        self.policy_net.load_state_dict(torch.load(file_path))
+
+    def evaluate():
+        self.policy_net.eval()
+
     def _get_output(self, state):
         state = torch.as_tensor(state).float().to(device)
 

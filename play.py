@@ -1,3 +1,6 @@
+import numpy as np
+import collections
+
 from follow_env import MeleeEnv
 from DQN import Agent
 
@@ -12,18 +15,18 @@ options = dict(
     stage='battlefield',
 )
 
-total_steps = 100000
+total_steps = 9999999999
 
 if __name__ == "__main__":
-    env = MeleeEnv(frame_limit=total_steps, **options)
-    observation = env.reset()
-
-    agent = Agent(gamma=0.99, epsilon=0.0, batch_size=64, lr=0.001, n_actions=env.action_space.n, input_dims=env.observation_space.n)
+    agent = Agent(state_size=2, action_size=2)
     agent.load("checkpoints/agent.pth")
     agent.evaluate()
 
+    env = MeleeEnv(frame_limit=total_steps, **options)
+    observation = env.reset()
+
     for step_count in range(total_steps):
-        action = agent.choose_action(observation)
-        _, reward, done, info = env.step(env.action_space.from_index(action))
+        action = agent.act(observation)
+        next_observation, reward, done, info = env.step(env.action_space.from_index(action))
 
     env.close()
