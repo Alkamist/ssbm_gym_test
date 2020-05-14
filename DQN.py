@@ -84,8 +84,9 @@ class Agent():
 
     def load(self, file_path):
         self.policy_net.load_state_dict(torch.load(file_path))
+        self.target_net.load_state_dict(torch.load(file_path))
 
-    def evaluate():
+    def evaluate(self):
         self.policy_net.eval()
 
     def _get_output(self, state):

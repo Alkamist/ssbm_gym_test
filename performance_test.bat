@@ -1,0 +1,2 @@
+python performance_test.py
+pause

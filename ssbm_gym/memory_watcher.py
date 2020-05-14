@@ -17,16 +17,15 @@ def parseMessage(message):
   return diffs
 
 class MemoryWatcherZMQ:
-  def __init__(self, path=None, port=None, pull=False):
+  def __init__(self, path=None, port=None):
     try:
       import zmq
     except ImportError as err:
       print("ImportError: {0}".format(err))
       sys.exit("Need zmq installed.")
 
-    self.pull = pull or port
     context = zmq.Context()
-    self.socket = context.socket(zmq.PULL if self.pull else zmq.REP)
+    self.socket = context.socket(zmq.REP)
     if path:
       self.socket.bind("ipc://" + path)
     elif port:
@@ -45,8 +44,7 @@ class MemoryWatcherZMQ:
     return self.messages
 
   def advance(self):
-    if not self.pull:
-      self.socket.send(b'')
+    self.socket.send(b'')
     self.messages = None
 
 class MemoryWatcher:

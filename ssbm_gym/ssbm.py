@@ -236,10 +236,10 @@ class ActionSet(object):
 #
 #tilt_sticks = [(0.4, 0.5), (0.6, 0.5), (0.5, 0.4), (0.5, 0.6)]
 #
-#axis_granularity = 3
-#axis_positions = [i / (axis_granularity - 1) for i in range(axis_granularity)]
-#diagonal_sticks = list(itertools.product(axis_positions, repeat=2))
-#diagonal_controllers = [SimpleController(*args) for args in itertools.product(SimpleButton, diagonal_sticks)]
+axis_granularity = 3
+axis_positions = [i / (axis_granularity - 1) for i in range(axis_granularity)]
+diagonal_sticks = list(itertools.product(axis_positions, repeat=2))
+diagonal_controllers = [SimpleController(*args) for args in itertools.product(SimpleButton, diagonal_sticks)]
 #
 #custom_controllers = itertools.chain(
 #    itertools.product([SimpleButton.A, SimpleButton.B], cardinal_sticks),
@@ -272,16 +272,16 @@ class ActionSet(object):
 #wd_right = SimpleController(button=SimpleButton.L, stick=Stick.polar(-1/8 * math.pi))
 #wd_both = [wd_left, wd_right]
 
-#actionTypes = dict(
+actionTypes = dict(
 #    cardinal = ActionSet(cardinal_controllers),
-#    diagonal = ActionSet(diagonal_controllers),
+    diagonal = ActionSet(diagonal_controllers),
 #    custom = ActionSet(custom_controllers),
 #    short_hop_test = ActionSet([SimpleController.neutral] * 10 + [short_hop_chain]),
 #     short_hop = ActionSet(custom_controllers + [short_hop]),
 #    custom_sh_jc = ActionSet(custom_controllers + [short_hop_chain, jc_chain]),
 #    fox_wd_test = ActionSet([SimpleController.neutral] * 10 + [fox_wd_chain_left]),
 #    custom_sh2_wd = ActionSet(custom_controllers + [sh2_chain] + wd_both),
-#)
+)
 
 #@pretty_struct
 #class SimpleStateAction(Structure):
