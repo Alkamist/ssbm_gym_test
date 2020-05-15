@@ -103,14 +103,14 @@ class MeleeEnv():
                 r -= 1.0
 
             # Punish taking percent.
-            #r -= 0.0001 * self._percent_taken(self.ai_port)
+            #r -= 0.01 * self._percent_taken(self.ai_port)
 
             # Reward killing the opponent.
             if self._just_died(self.opponent_port):
                 r += 1.0
 
             # Reward putting percent on the opponent.
-            #r += 0.0001 * self._percent_taken(self.opponent_port)
+            #r += 0.01 * self._percent_taken(self.opponent_port)
 
             #x0 = self._game_state.players[self.ai_port].x
             #y0 = self._game_state.players[self.ai_port].y
@@ -143,7 +143,8 @@ class MeleeEnv():
         self._game_state = self.dolphin.step([action])
         self._update_observation_space()
         reward = self._compute_reward()
-        done = self._game_state.frame >= self.frame_limit
+        #done = self._game_state.frame >= self.frame_limit
+        done = self._just_died(self.ai_port) or self._just_died(self.opponent_port)
 
         return self.observation_space.data, reward, done, {}
 
