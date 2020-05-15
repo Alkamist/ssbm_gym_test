@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import numpy as np
 
 import random
 from collections import namedtuple, deque
@@ -26,25 +25,18 @@ class QNetwork(nn.Module):
         x = self.bn2(F.relu(self.fc2(x)))
         return self.fc3(x)
 
+Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
 class ReplayBuffer:
     def __init__(self, buffer_size, batch_size):
         self.memory = deque(maxlen=buffer_size)
         self.batch_size = batch_size
-        self.experiences = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
 
-    def add(self,state, action, reward, next_state, done):
-        experience = self.experiences(state, action, reward, next_state, done)
+    def add(self, state, action, reward, next_state, done):
+        experience = Experience(state, action, reward, next_state, done)
         self.memory.append(experience)
 
     def sample(self):
         experiences = random.sample(self.memory, k=self.batch_size)
-
-        # Uses a ton of CPU:
-        #states = torch.from_numpy(np.vstack([e.state for e in experiences if e is not None])).float().to(device)
-        #actions = torch.from_numpy(np.vstack([e.action for e in experiences if e is not None])).long().to(device)
-        #rewards = torch.from_numpy(np.vstack([e.reward for e in experiences if e is not None])).float().to(device)
-        #next_states = torch.from_numpy(np.vstack([e.next_state for e in experiences if e is not None])).float().to(device)
-        #dones = torch.from_numpy(np.vstack([e.done for e in experiences if e is not None]).astype(np.uint8)).float().to(device)
 
         states = torch.as_tensor([e.state for e in experiences if e is not None], device=device).float()
         actions = torch.as_tensor([[e.action] for e in experiences if e is not None], device=device).long()
@@ -122,7 +114,7 @@ class Agent():
         if self.no_epsilon or (random.random() > self.epsilon):
             return torch.argmax(action_values).item()
         else:
-            return random.choice(np.arange(self.action_size))
+            return random.randrange(self.action_size)
 
     def _sample_memory(self):
         states, actions, rewards, next_states, dones = self.memory.sample()
