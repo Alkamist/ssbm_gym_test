@@ -68,24 +68,24 @@ class MeleeEnv():
     def _get_player_space(self, player_index):
         player_space = []
         #player_space += one_hot(self._game_state.players[player_index].character, num_characters)
-        #player_space += one_hot(self._game_state.players[player_index].action_state, num_actions)
-        #player_space.append(self._game_state.players[player_index].action_frame / 30.0)
+        player_space += one_hot(self._game_state.players[player_index].action_state, num_actions)
+        player_space.append(self._game_state.players[player_index].action_frame / 30.0)
         player_space.append(self._game_state.players[player_index].x / 100.0)
         player_space.append(self._game_state.players[player_index].y / 100.0)
-        #player_space.append(self._game_state.players[player_index].percent / 100.0)
-        #player_space.append(self._game_state.players[player_index].facing)
-        #player_space.append(1.0 if self._game_state.players[player_index].invulnerable else 0.0)
-        #player_space.append(self._game_state.players[player_index].hitlag_frames_left / 30.0)
-        #player_space.append(self._game_state.players[player_index].hitstun_frames_left / 30.0)
-        #player_space.append(self._game_state.players[player_index].shield_size / 60.0)
-        #player_space.append(1.0 if self._game_state.players[player_index].in_air else 0.0)
-        #player_space.append(self._game_state.players[player_index].jumps_used)
-        #if self._previous_game_state is not None:
-        #    player_space.append((self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x) / 100.0)
-        #    player_space.append((self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y) / 100.0)
-        #else:
-        #    player_space.append(0.0)
-        #    player_space.append(0.0)
+        player_space.append(self._game_state.players[player_index].percent / 100.0)
+        player_space.append(self._game_state.players[player_index].facing)
+        player_space.append(1.0 if self._game_state.players[player_index].invulnerable else 0.0)
+        player_space.append(self._game_state.players[player_index].hitlag_frames_left / 30.0)
+        player_space.append(self._game_state.players[player_index].hitstun_frames_left / 30.0)
+        player_space.append(self._game_state.players[player_index].shield_size / 60.0)
+        player_space.append(1.0 if self._game_state.players[player_index].in_air else 0.0)
+        player_space.append(self._game_state.players[player_index].jumps_used)
+        if self._previous_game_state is not None:
+            player_space.append((self._game_state.players[player_index].x - self._previous_game_state.players[player_index].x) / 100.0)
+            player_space.append((self._game_state.players[player_index].y - self._previous_game_state.players[player_index].y) / 100.0)
+        else:
+            player_space.append(0.0)
+            player_space.append(0.0)
         return player_space
 
     def _percent_taken(self, player_index):
@@ -97,17 +97,27 @@ class MeleeEnv():
     def _compute_reward(self):
         r = 0.0
 
-        #if self._previous_game_state is not None:
-        #    # Punish dying.
-        #    if self._just_died(self.ai_port):
-        #        r -= 1.0
+        if self._previous_game_state is not None:
+            # Punish dying.
+            if self._just_died(self.ai_port):
+                r -= 1.0
 
-        x0 = self._game_state.players[self.ai_port].x
-        y0 = self._game_state.players[self.ai_port].y
-        x1 = self._game_state.players[self.opponent_port].x
-        y1 = self._game_state.players[self.opponent_port].y
-        d = sqrt((x0 - x1)**2 + (y0 - y1)**2)
-        r += 1.0 / (1.0 + 0.1 * d)
+            # Punish taking percent.
+            r -= 0.005 * self._percent_taken(self.ai_port)
+
+            # Reward killing the opponent.
+            if self._just_died(self.opponent_port):
+                r += 1.0
+
+            # Reward putting percent on the opponent.
+            r += 0.005 * self._percent_taken(self.opponent_port)
+
+            #x0 = self._game_state.players[self.ai_port].x
+            #y0 = self._game_state.players[self.ai_port].y
+            #x1 = self._game_state.players[self.opponent_port].x
+            #y1 = self._game_state.players[self.opponent_port].y
+            #d = sqrt((x0 - x1)**2 + (y0 - y1)**2)
+            #r += 0.001 / (1.0 + 0.1 * d)
 
         return r
 
@@ -138,24 +148,24 @@ class MeleeEnv():
         return self.observation_space.data, reward, done, {}
 
 NONE_stick = [
+    (0.5, 0.5),
+    (0.5, 0.0),
+    (0.0, 0.5),
     #(.35, 0.5),
     #(.65, 0.5),
-    (0.5, 0.5),
     (1.0, 0.5),
-    (0.0, 0.5),
-    (0.5, 1.0),
-    (0.5, 0.0),
+    #(0.5, 1.0)
 ]
 A_stick = [
-    #(0.5, 0.0),
-    #(0.0, 0.5),
+    (0.5, 0.0),
+    (0.0, 0.5),
     #(.35, 0.5),
-    #(0.5, 0.5),
+    (0.5, 0.5),
     #(.65, 0.5),
-    #(1.0, 0.5),
+    (1.0, 0.5),
     #(0.5, .35),
     #(0.5, .65),
-    #(0.5, 1.0)
+    (0.5, 1.0)
 ]
 B_stick = [
     #(0.5, 0.5),
@@ -168,9 +178,9 @@ Z_stick = [
     #(0.5, 0.5)
 ]
 Y_stick = [
-    #(0.0, 0.5),
-    #(0.5, 0.5),
-    #(1.0, 0.5)
+    (0.0, 0.5),
+    (0.5, 0.5),
+    (1.0, 0.5)
 ]
 L_stick = [
     #(0.5, 0.5),

@@ -12,13 +12,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class QNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_size, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, action_size)
+        self.fc1 = nn.Linear(state_size, 64)
+        self.bn1 = nn.BatchNorm1d(num_features=64)
+        nn.init.xavier_uniform_(self.fc1.weight)
+        self.fc2 = nn.Linear(64, 64)
+        self.bn2 = nn.BatchNorm1d(num_features=64)
+        nn.init.xavier_uniform_(self.fc2.weight)
+        self.fc3 = nn.Linear(64, action_size)
+        nn.init.xavier_uniform_(self.fc3.weight)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.bn1(F.relu(self.fc1(x)))
+        x = self.bn2(F.relu(self.fc2(x)))
         return self.fc3(x)
 
 class ReplayBuffer:
@@ -47,7 +52,7 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.0005, batch_size=64, memory_size=10000,
+    def __init__(self, state_size, action_size, lr=0.001, batch_size=64, memory_size=10000,
                  update_every=4, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
                  epsilon_decay=0.996):
         self.state_size = state_size
@@ -66,6 +71,7 @@ class Agent():
         self.memory = ReplayBuffer(action_size, memory_size, batch_size)
         self.current_step = 0
         self.loss_criterion = torch.nn.MSELoss()
+        self.no_epsilon = False
 
     def step(self, state, action, reward, next_step, done):
         self.memory.add(state, action, reward, next_step, done)
@@ -88,16 +94,17 @@ class Agent():
 
     def evaluate(self):
         self.policy_net.eval()
+        self.no_epsilon = True
 
     def _get_output(self, state):
-        state = torch.as_tensor(state).float().to(device)
+        state = torch.as_tensor([state]).float().to(device)
 
         self.policy_net.eval()
         with torch.no_grad():
             action_values = self.policy_net(state)
         self.policy_net.train()
 
-        if random.random() > self.epsilon:
+        if self.no_epsilon or (random.random() > self.epsilon):
             return torch.argmax(action_values).item()
         else:
             return random.choice(np.arange(self.action_size))
