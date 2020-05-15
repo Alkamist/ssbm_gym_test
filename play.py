@@ -15,17 +15,18 @@ options = dict(
     stage='battlefield',
 )
 
-total_steps = 9999999999
+state_size = 792
+action_size = 30
 
 if __name__ == "__main__":
-    agent = Agent(state_size=792, action_size=30)
+    agent = Agent(state_size=state_size, action_size=action_size)
     agent.load("checkpoints/agent.pth")
     agent.evaluate()
 
-    env = MeleeEnv(frame_limit=total_steps, **options)
+    env = MeleeEnv(max_episode_steps=9999999, **options)
     observation = env.reset()
 
-    for step_count in range(total_steps):
+    for step_count in range(9999999999):
         action = agent.act(observation)
         observation, reward, done, info = env.step(env.action_space.from_index(action))
 

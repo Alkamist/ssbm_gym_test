@@ -49,12 +49,13 @@ class ObservationSpace():
         return self.data[n]
 
 class MeleeEnv():
-    def __init__(self, frame_limit=100000, **kwargs):
+    def __init__(self, max_episode_steps=300, **kwargs):
         super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**kwargs)
         self.ai_port = 0
         self.opponent_port = 1
-        self.frame_limit = frame_limit
+        self.max_episode_steps = max_episode_steps
+        self.episode_step = 0
         self._game_state = None
         self._previous_game_state = None
 
@@ -143,8 +144,13 @@ class MeleeEnv():
         self._game_state = self.dolphin.step([action])
         self._update_observation_space()
         reward = self._compute_reward()
-        #done = self._game_state.frame >= self.frame_limit
-        done = self._just_died(self.ai_port) or self._just_died(self.opponent_port)
+        done = self._just_died(self.ai_port) or self._just_died(self.opponent_port) \
+                                             or self.episode_step >= self.max_episode_steps
+
+        if done:
+            self.episode_step = 0
+        else:
+            self.episode_step += 1
 
         return self.observation_space.data, reward, done, {}
 
