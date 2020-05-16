@@ -9,16 +9,13 @@ from collections import namedtuple, deque
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=256):
+    def __init__(self, input_size, output_size, hidden_size=64):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         #self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
-        nn.init.xavier_uniform_(self.fc1.weight)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         #self.bn2 = nn.BatchNorm1d(num_features=hidden_size)
-        nn.init.xavier_uniform_(self.fc2.weight)
         self.fc3 = nn.Linear(hidden_size, output_size)
-        nn.init.xavier_uniform_(self.fc3.weight)
 
     def forward(self, x):
         #x = self.bn1(F.relu(self.fc1(x)))
@@ -52,9 +49,9 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.001, batch_size=1024, memory_size=100000,
+    def __init__(self, state_size, action_size, lr=0.001, batch_size=32, memory_size=10000,
                  update_every=1000, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
-                 epsilon_decay=0.996, learn_every=64):
+                 epsilon_decay=0.996, learn_every=4):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every

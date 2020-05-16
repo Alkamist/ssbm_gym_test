@@ -9,20 +9,15 @@ from collections import namedtuple, deque
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=256):
+    def __init__(self, input_size, output_size, hidden_size=64):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
-        nn.init.xavier_uniform_(self.fc1.weight)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.bn2 = nn.BatchNorm1d(num_features=hidden_size)
-        nn.init.xavier_uniform_(self.fc2.weight)
         self.fc3 = nn.Linear(hidden_size, output_size)
-        nn.init.xavier_uniform_(self.fc3.weight)
 
     def forward(self, x):
-        x = self.bn1(F.relu(self.fc1(x)))
-        x = self.bn2(F.relu(self.fc2(x)))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
         return self.fc3(x)
 
 Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
@@ -50,14 +45,14 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.001, batch_size=128, memory_size=30000,
-                 update_every=4, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
-                 epsilon_decay=0.992, HER_batch_size=128):
+    def __init__(self, state_size, action_size, lr=0.001, batch_size=32, memory_size=10000,
+                 update_every=1000, gamma=0.99, tau=0.003, epsilon_start=0.95, epsilon_end=0.01,
+                 epsilon_decay=0.99, learn_every=4):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every
+        self.learn_every = learn_every
         self.batch_size = batch_size
-        self.HER_batch_size = HER_batch_size
         self.lr = lr
         self.epsilon = epsilon_start
         self.epsilon_start = epsilon_start
@@ -71,7 +66,6 @@ class Agent():
         #self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
         self.memory = ReplayBuffer(memory_size, batch_size)
-        self.HER_memory = ReplayBuffer(memory_size, HER_batch_size)
         self.HER_temporary_memory = []
         self.current_step = 0
         #self.loss_criterion = torch.nn.MSELoss()
@@ -79,9 +73,8 @@ class Agent():
         self.no_epsilon = False
 
     def step(self, state, action, reward, next_state, done):
-        self.current_step = (self.current_step + 1) % self.update_every
-        if self.current_step == 0:
-            if (len(self.memory) > self.batch_size) and (len(self.HER_memory) > self.HER_batch_size):
+        if self.current_step % self.learn_every == 0:
+            if len(self.memory) > self.batch_size:
                 self._learn()
 
         self.memory.add(state + [1.0], action, reward, next_state + [1.0], done)
@@ -91,10 +84,12 @@ class Agent():
             # The episode failed.
             if reward < 1.0:
                 for memory in self.HER_temporary_memory:
-                    self.HER_memory.add(*memory)
+                    self.memory.add(*memory)
 
             self.epsilon = self.epsilon_start
             self.HER_temporary_memory = []
+
+        self.current_step += 1
 
     def act(self, state):
         output = self._get_output(state)
@@ -125,20 +120,8 @@ class Agent():
         else:
             return random.randrange(self.action_size)
 
-    def _sample_memory(self):
-        states, actions, rewards, next_states, dones = self.memory.sample()
-        HER_states, HER_actions, HER_rewards, HER_next_states, HER_dones = self.HER_memory.sample()
-
-        states = torch.cat((states, HER_states))
-        actions = torch.cat((actions, HER_actions))
-        rewards = torch.cat((rewards, HER_rewards))
-        next_states = torch.cat((next_states, HER_next_states))
-        dones = torch.cat((dones, HER_dones))
-
-        return states, actions, rewards, next_states, dones
-
     def _learn(self):
-        states, actions, rewards, next_states, dones = self._sample_memory()
+        states, actions, rewards, next_states, dones = self.memory.sample()
 
         self.policy_net.train()
         self.target_net.eval()
@@ -155,8 +138,9 @@ class Agent():
         loss.backward()
         self.optimizer.step()
 
-        #self._hard_update()
-        self._soft_update()
+        if self.current_step % self.update_every == 0:
+            self._hard_update()
+        #self._soft_update()
 
     def _hard_update(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())

@@ -30,7 +30,4 @@ if __name__ == "__main__":
         action = agent.act(observation)
         observation, reward, done, info = env.step(env.action_space.from_index(action))
 
-        #if reward != 0.0:
-        #    print(reward)
-
     env.close()
