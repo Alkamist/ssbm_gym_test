@@ -9,20 +9,22 @@ from collections import namedtuple, deque
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=64):
+    def __init__(self, input_size, output_size, hidden_size=256):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
+        #self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
         nn.init.xavier_uniform_(self.fc1.weight)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.bn2 = nn.BatchNorm1d(num_features=hidden_size)
+        #self.bn2 = nn.BatchNorm1d(num_features=hidden_size)
         nn.init.xavier_uniform_(self.fc2.weight)
         self.fc3 = nn.Linear(hidden_size, output_size)
         nn.init.xavier_uniform_(self.fc3.weight)
 
     def forward(self, x):
-        x = self.bn1(F.relu(self.fc1(x)))
-        x = self.bn2(F.relu(self.fc2(x)))
+        #x = self.bn1(F.relu(self.fc1(x)))
+        #x = self.bn2(F.relu(self.fc2(x)))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
         return self.fc3(x)
 
 Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
@@ -50,12 +52,13 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.001, batch_size=16, memory_size=10000,
-                 update_every=4, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
-                 epsilon_decay=0.996):
+    def __init__(self, state_size, action_size, lr=0.001, batch_size=1024, memory_size=100000,
+                 update_every=1000, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
+                 epsilon_decay=0.996, learn_every=64):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every
+        self.learn_every = learn_every
         self.batch_size = batch_size
         self.lr = lr
         self.epsilon = epsilon_start
@@ -76,8 +79,8 @@ class Agent():
         self.no_epsilon = False
 
     def step(self, state, action, reward, next_step, done):
-        self.current_step = (self.current_step + 1) % self.update_every
-        if self.current_step == 0:
+        self.current_step += 1
+        if self.current_step % self.learn_every == 0:
             if len(self.memory) > self.batch_size:
                 self._learn()
         self.memory.add(state, action, reward, next_step, done)
@@ -131,8 +134,9 @@ class Agent():
         loss.backward()
         self.optimizer.step()
 
-        #self._hard_update()
-        self._soft_update()
+        if self.current_step % self.update_every == 0:
+            self._hard_update()
+        #self._soft_update()
 
     def _hard_update(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())

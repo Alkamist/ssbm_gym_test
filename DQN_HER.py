@@ -9,7 +9,7 @@ from collections import namedtuple, deque
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=64):
+    def __init__(self, input_size, output_size, hidden_size=256):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
@@ -50,9 +50,9 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.001, batch_size=16, memory_size=10000,
+    def __init__(self, state_size, action_size, lr=0.001, batch_size=128, memory_size=30000,
                  update_every=4, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
-                 epsilon_decay=0.996, HER_batch_size=16):
+                 epsilon_decay=0.992, HER_batch_size=128):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every
@@ -72,19 +72,29 @@ class Agent():
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
         self.memory = ReplayBuffer(memory_size, batch_size)
         self.HER_memory = ReplayBuffer(memory_size, HER_batch_size)
+        self.HER_temporary_memory = []
         self.current_step = 0
         #self.loss_criterion = torch.nn.MSELoss()
         self.loss_criterion = torch.nn.SmoothL1Loss()
         self.no_epsilon = False
 
-    def step(self, state, action, reward, next_step, done):
+    def step(self, state, action, reward, next_state, done):
         self.current_step = (self.current_step + 1) % self.update_every
         if self.current_step == 0:
             if (len(self.memory) > self.batch_size) and (len(self.HER_memory) > self.HER_batch_size):
                 self._learn()
-        self.memory.add(state, action, reward, next_step, done)
+
+        self.memory.add(state + [1.0], action, reward, next_state + [1.0], done)
+        self.HER_temporary_memory.append((state + [0.0], action, 1.0, next_state + [0.0], done))
+
         if done:
+            # The episode failed.
+            if reward < 1.0:
+                for memory in self.HER_temporary_memory:
+                    self.HER_memory.add(*memory)
+
             self.epsilon = self.epsilon_start
+            self.HER_temporary_memory = []
 
     def act(self, state):
         output = self._get_output(state)

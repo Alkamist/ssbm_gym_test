@@ -49,7 +49,7 @@ class ObservationSpace():
         return self.data[n]
 
 class MeleeEnv():
-    def __init__(self, max_episode_steps=300, **kwargs):
+    def __init__(self, max_episode_steps=999999999, **kwargs):
         super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**kwargs)
         self.ai_port = 0

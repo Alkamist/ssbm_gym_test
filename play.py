@@ -23,11 +23,14 @@ if __name__ == "__main__":
     agent.load("checkpoints/agent.pth")
     agent.evaluate()
 
-    env = MeleeEnv(max_episode_steps=9999999, **options)
+    env = MeleeEnv(max_episode_steps=9999999999, **options)
     observation = env.reset()
 
     for step_count in range(9999999999):
         action = agent.act(observation)
         observation, reward, done, info = env.step(env.action_space.from_index(action))
+
+        #if reward != 0.0:
+        #    print(reward)
 
     env.close()
