@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import random
+import math
 from collections import namedtuple, deque
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -12,17 +13,42 @@ class QNetwork(nn.Module):
     def __init__(self, input_size, output_size, hidden_size=64):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        #self.bn1 = nn.BatchNorm1d(num_features=hidden_size)
+        #self.bn1 = nn.BatchNorm1d(hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        #self.bn2 = nn.BatchNorm1d(num_features=hidden_size)
+        #self.bn2 = nn.BatchNorm1d(hidden_size)
         self.fc3 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        #x = self.bn1(F.relu(self.fc1(x)))
-        #x = self.bn2(F.relu(self.fc2(x)))
+        #x = F.relu(self.bn1(self.fc1(x)))
+        #x = F.relu(self.bn2(self.fc2(x)))
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return self.fc3(x)
+
+#class ResidualBlock(nn.Module):
+#    def __init__(self, input_size, hidden_size):
+#        super(ResidualBlock, self).__init__()
+#        self.mlp = nn.Sequential(
+#            nn.Linear(input_size, hidden_size),
+#            nn.ReLU(True),
+#            nn.Linear(hidden_size, input_size),
+#            nn.ReLU(True)
+#        )
+#
+#    def forward(self, x):
+#        return x + self.mlp(x)
+#
+#class ResNet(nn.Module):
+#    def __init__(self, input_size, output_size, hidden_size=256, num_layers=2):
+#        super(ResNet, self).__init__()
+#        residual_blocks = [ResidualBlock(input_size, hidden_size) for _ in range(num_layers)]
+#        self.residual_blocks = nn.Sequential(*residual_blocks)
+#        self.linear_layer = nn.Linear(input_size, output_size)
+#
+#    def forward(self, x):
+#        features = self.residual_blocks(x)
+#        prediction = self.linear_layer(features)
+#        return prediction
 
 Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
 class ReplayBuffer:
@@ -49,9 +75,9 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.001, batch_size=32, memory_size=10000,
-                 update_every=1000, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
-                 epsilon_decay=0.996, learn_every=4):
+    def __init__(self, state_size, action_size, lr=0.01, batch_size=128, memory_size=250000,
+                 update_every=516, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.05,
+                 epsilon_decay=40000, learn_every=16):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every
@@ -67,26 +93,22 @@ class Agent():
         self.policy_net = QNetwork(state_size, action_size).to(device)
         self.target_net = QNetwork(state_size, action_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        #self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
         self.memory = ReplayBuffer(memory_size, batch_size)
         self.current_step = 0
-        #self.loss_criterion = torch.nn.MSELoss()
         self.loss_criterion = torch.nn.SmoothL1Loss()
         self.no_epsilon = False
 
-    def step(self, state, action, reward, next_step, done):
-        self.current_step += 1
+    def step(self, state, action, reward, next_state, done):
         if self.current_step % self.learn_every == 0:
             if len(self.memory) > self.batch_size:
                 self._learn()
-        self.memory.add(state, action, reward, next_step, done)
-        if done:
-            self.epsilon = self.epsilon_start
+        self.memory.add(state, action, reward, next_state, done)
+        self.current_step += 1
 
     def act(self, state):
         output = self._get_output(state)
-        self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_end)
+        #self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1.0 * self.current_step / self.epsilon_decay)
         return output
 
     def save(self, file_path):
