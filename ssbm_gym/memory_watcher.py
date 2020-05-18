@@ -35,6 +35,9 @@ class MemoryWatcherZMQ:
 
     self.messages = None
 
+  def __del__(self):
+    self.socket.close()
+
   def get_messages(self):
     if self.messages is None:
       message = self.socket.recv()

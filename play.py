@@ -12,10 +12,11 @@ options = dict(
     char1='falcon',
     char2='falcon',
     stage='battlefield',
+    worker_id=1,
 )
 
-state_size = 2
-action_size = 2
+state_size = 10
+action_size = 5
 
 goal = [25.0, 0.0]
 goal_embed = [goal[0] / 100.0, goal[1] / 100.0]
@@ -31,7 +32,7 @@ def calculate_reward(state_embed, goal_embed):
     return 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else 0.0
 
 if __name__ == "__main__":
-    agent = Agent(state_size=state_size + 2, action_size=action_size)
+    agent = Agent(state_size=state_size, action_size=action_size, epsilon_start=0.01, epsilon_end=0.01)
     agent.load("checkpoints/agent.pth")
     agent.evaluate()
 
@@ -40,7 +41,7 @@ if __name__ == "__main__":
 
     for step_count in range(9999999999):
         state_embed = melee.embed_state()
-        action = agent.act(state_embed + goal_embed)
+        action = agent.act(state_embed)
         reward = calculate_reward(state_embed, goal_embed)
         if reward >= 1.0:
             print(state.players[0].x)

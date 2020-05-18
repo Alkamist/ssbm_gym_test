@@ -69,6 +69,8 @@ class Pad:
     def __del__(self):
         if not self.tcp:
             self.pipe.close()
+        else:
+            self.socket.close()
 
     def write(self, command, buffering=False):
         self.message += command + '\n'

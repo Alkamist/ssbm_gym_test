@@ -10,13 +10,13 @@ num_stages = 32
 num_characters = 32
 
 NONE_stick = [
-    #(0.5, 0.5),
-    #(0.5, 0.0),
-    (0.35, 0.5),
+    (0.5, 0.5), # Middle
+    (0.5, 0.0), # Down
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
+    (0.5, 1.0), # Up
     #(.35, 0.5),
     #(.65, 0.5),
-    (0.75, 0.5),
-    #(0.5, 1.0)
 ]
 A_stick = [
     #(0.5, 0.0),
@@ -77,19 +77,19 @@ class Melee():
     def embed_player_state(self, player_index):
         state = self.state.players[player_index]
         player = []
+        player.append(state.x / 100.0)
+        player.append(state.y / 100.0)
         #player += one_hot(state.character, num_characters)
         #player += one_hot(state.action_state, num_actions)
         #player.append(state.action_frame / 30.0)
-        player.append(state.x / 100.0)
-        player.append(state.y / 100.0)
         #player.append(state.percent / 100.0)
-        #player.append(state.facing)
+        player.append(state.facing)
         #player.append(1.0 if state.invulnerable else 0.0)
         #player.append(state.hitlag_frames_left / 30.0)
         #player.append(state.hitstun_frames_left / 30.0)
         #player.append(state.shield_size / 60.0)
-        #player.append(1.0 if state.in_air else 0.0)
-        #player.append(state.jumps_used)
+        player.append(1.0 if state.in_air else 0.0)
+        player.append(state.jumps_used)
         #if self.previous_state is not None:
         #    previous_state = self.previous_state.players[player_index]
         #    player.append((state.x - previous_state.x) / 100.0)
@@ -100,8 +100,7 @@ class Melee():
         return player
 
     def embed_state(self):
-        return self.embed_player_state(0)
-        #return self.embed_player_state(0) + self.embed_player_state(1)
+        return self.embed_player_state(0) + self.embed_player_state(1)
 
     def percent_taken_by_player(self, player_index):
         return self.state.players[player_index].percent - self.state.players[player_index].percent

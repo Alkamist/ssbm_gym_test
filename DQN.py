@@ -10,13 +10,16 @@ from collections import namedtuple, deque
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=64):
+    def __init__(self, input_size, output_size, hidden_size=1024):
         super(QNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
+        torch.nn.init.kaiming_uniform_(self.fc1.weight)
         #self.bn1 = nn.BatchNorm1d(hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
+        torch.nn.init.kaiming_uniform_(self.fc2.weight)
         #self.bn2 = nn.BatchNorm1d(hidden_size)
         self.fc3 = nn.Linear(hidden_size, output_size)
+        torch.nn.init.kaiming_uniform_(self.fc3.weight)
 
     def forward(self, x):
         #x = F.relu(self.bn1(self.fc1(x)))
@@ -75,9 +78,9 @@ class ReplayBuffer:
         return len(self.memory)
 
 class Agent():
-    def __init__(self, state_size, action_size, lr=0.01, batch_size=128, memory_size=250000,
-                 update_every=516, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.05,
-                 epsilon_decay=40000, learn_every=16):
+    def __init__(self, state_size, action_size, lr=0.00001, batch_size=32, memory_size=1000000,
+                 update_every=40000, gamma=0.99, tau=0.003, epsilon_start=1.0, epsilon_end=0.01,
+                 epsilon_decay=100000, learn_every=16):
         self.state_size = state_size
         self.action_size = action_size
         self.update_every = update_every
@@ -97,7 +100,6 @@ class Agent():
         self.memory = ReplayBuffer(memory_size, batch_size)
         self.current_step = 0
         self.loss_criterion = torch.nn.SmoothL1Loss()
-        self.no_epsilon = False
 
     def step(self, state, action, reward, next_state, done):
         if self.current_step % self.learn_every == 0:
@@ -108,7 +110,7 @@ class Agent():
 
     def act(self, state):
         output = self._get_output(state)
-        #self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1.0 * self.current_step / self.epsilon_decay)
+        self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1.0 * self.current_step / self.epsilon_decay)
         return output
 
     def save(self, file_path):
@@ -120,17 +122,14 @@ class Agent():
 
     def evaluate(self):
         self.policy_net.eval()
-        self.no_epsilon = True
 
     def _get_output(self, state):
-        state = torch.as_tensor([state], device=device).float()
-
-        self.policy_net.eval()
-        with torch.no_grad():
-            action_values = self.policy_net(state)
-        self.policy_net.train()
-
-        if self.no_epsilon or (random.random() > self.epsilon):
+        if random.random() > self.epsilon:
+            state = torch.as_tensor([state], device=device).float()
+            self.policy_net.eval()
+            with torch.no_grad():
+                action_values = self.policy_net(state)
+            self.policy_net.train()
             return torch.argmax(action_values).item()
         else:
             return random.randrange(self.action_size)
