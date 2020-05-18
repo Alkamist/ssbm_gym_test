@@ -22,7 +22,7 @@ max_resets = 5
 max_steps_before_reset = 105020
 
 episode_length = 600
-state_size = 10
+state_size = 792
 action_size = 5
 
 goal = [25.0, 0.0]
@@ -39,7 +39,7 @@ def calculate_reward(state_embed, goal_embed):
     return 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else 0.0
 
 if __name__ == "__main__":
-    agent = Agent(state_size=state_size, action_size=action_size)
+    agent = Agent(state_size=state_size + 2, action_size=action_size)
     #agent.load("checkpoints/agent.pth")
 
     for reset_count in range(max_resets):
@@ -48,14 +48,14 @@ if __name__ == "__main__":
 
         rewards = deque(maxlen=3600)
 
-        #HER_memory = []
+        HER_memory = []
 
         start_time = time.time()
         start_step = 0
         fps = 0
         for step_count in range(max_steps_before_reset):
             state_embed = melee.embed_state()
-            action = agent.act(state_embed)
+            action = agent.act(state_embed + goal_embed)
             #action = random.randrange(melee.num_actions)
             next_state = melee.step(action)
             next_state_embed = melee.embed_state()
@@ -63,20 +63,21 @@ if __name__ == "__main__":
             reward = calculate_reward(state_embed, goal_embed)
             done = (step_count > 0 and step_count % episode_length == 0) or (reward >= 1.0)
 
-            agent.step(state_embed, action, reward, next_state_embed, done)
+            agent.step(state_embed + goal_embed, action, reward, next_state_embed + goal_embed, done)
 
-            #HER_memory.append([state_embed, action, 0.0, next_state_embed, done])
-            #if done:
-            #    # The episode failed.
-            #    if reward <= 0.0:
-            #        new_goal_embed = [state.players[0].x / 100.0, state.players[0].y / 100.0]
-            #        for memory in HER_memory:
-            #            agent.memory.add(memory[0] + new_goal_embed,
-            #                            memory[1],
-            #                            calculate_reward(memory[0], new_goal_embed),
-            #                            memory[3] + new_goal_embed,
-            #                            memory[4])
-            #    HER_memory = []
+            HER_memory.append([state_embed, action, next_state_embed])
+            if done:
+                # The episode failed.
+                if reward <= 0.0:
+                    new_goal_embed = [state.players[0].x / 100.0, state.players[0].y / 100.0]
+                    for memory in HER_memory:
+                        new_reward = calculate_reward(memory[0], new_goal_embed)
+                        agent.memory.add(memory[0] + new_goal_embed,
+                                        memory[1],
+                                        new_reward,
+                                        memory[2] + new_goal_embed,
+                                        True if new_reward >= 1.0 else False)
+                    HER_memory = []
 
             state = next_state
             rewards.append(reward)

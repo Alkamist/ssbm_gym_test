@@ -80,23 +80,23 @@ class Melee():
         player.append(state.x / 100.0)
         player.append(state.y / 100.0)
         #player += one_hot(state.character, num_characters)
-        #player += one_hot(state.action_state, num_actions)
-        #player.append(state.action_frame / 30.0)
-        #player.append(state.percent / 100.0)
+        player += one_hot(state.action_state, num_actions)
+        player.append(state.action_frame / 30.0)
+        player.append(state.percent / 100.0)
         player.append(state.facing)
-        #player.append(1.0 if state.invulnerable else 0.0)
-        #player.append(state.hitlag_frames_left / 30.0)
-        #player.append(state.hitstun_frames_left / 30.0)
-        #player.append(state.shield_size / 60.0)
+        player.append(1.0 if state.invulnerable else 0.0)
+        player.append(state.hitlag_frames_left / 30.0)
+        player.append(state.hitstun_frames_left / 30.0)
+        player.append(state.shield_size / 60.0)
         player.append(1.0 if state.in_air else 0.0)
         player.append(state.jumps_used)
-        #if self.previous_state is not None:
-        #    previous_state = self.previous_state.players[player_index]
-        #    player.append((state.x - previous_state.x) / 100.0)
-        #    player.append((state.y - previous_state.y) / 100.0)
-        #else:
-        #    player.append(0.0)
-        #    player.append(0.0)
+        if self.previous_state is not None:
+            previous_state = self.previous_state.players[player_index]
+            player.append((state.x - previous_state.x) / 100.0)
+            player.append((state.y - previous_state.y) / 100.0)
+        else:
+            player.append(0.0)
+            player.append(0.0)
         return player
 
     def embed_state(self):
