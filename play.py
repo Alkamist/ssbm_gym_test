@@ -1,7 +1,10 @@
 import math
+import torch
 
 from melee import Melee
 from DQN import DQN
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 options = dict(
     windows=True,
@@ -41,14 +44,13 @@ if __name__ == "__main__":
     state = melee.reset()
 
     for step_count in range(99999999999999):
-        state_embed = melee.embed_state()
-        action = dqn.act(state_embed, epsilon=0.0)
+        state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+        action = dqn.act(state_embed, epsilon=0.01)
         next_state = melee.step(action)
-        next_state_embed = melee.embed_state()
-        reward = calculate_reward(state_embed, goal_embed)
-        state = next_state
+        next_state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+        reward = torch.as_tensor([[calculate_reward(state_embed[0], goal_embed)]], device=device, dtype=torch.float32)
 
-        if reward >= 1.0:
-            print(reward)
+        if reward[0].item() >= 1.0:
+            print(reward[0].item())
 
     melee.close()

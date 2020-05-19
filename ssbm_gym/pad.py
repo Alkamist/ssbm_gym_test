@@ -34,6 +34,10 @@ class Pad:
         cls.pad_id += 1
         return cls.pad_id
 
+    @classmethod
+    def reset_pad_id(cls):
+        cls.pad_id = -1
+
     def get_tcp_port(self):
         min_mw_tcp_port = 5555
         max_workers = 11520
@@ -71,6 +75,7 @@ class Pad:
             self.pipe.close()
         else:
             self.socket.close()
+            self.reset_pad_id()
 
     def write(self, command, buffering=False):
         self.message += command + '\n'

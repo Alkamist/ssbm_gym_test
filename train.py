@@ -22,6 +22,14 @@ options = dict(
     stage='battlefield',
 )
 
+training_cycles = 300
+memories_per_cycle = 30000
+frames_to_check_performance = 10800
+
+epsilon_start = 1.0
+epsilon_end = 0.01
+epsilon_decay = 100
+
 batch_size = 32
 state_size = 792
 action_size = 30
@@ -40,40 +48,56 @@ def calculate_reward(state_embed, goal_embed):
     reward = 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else -1.0
     return reward
 
-if __name__ == "__main__":
-    replay_buffer = ReplayBuffer(buffer_size=100000)
-    replay_buffer.load("replay_memories/memories")
+def perform_action(melee, dqn, epsilon):
+    state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+    action = dqn.act(state_embed, epsilon=epsilon)
+    next_state = melee.step(action)
+    next_state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+    reward = torch.as_tensor([[calculate_reward(state_embed[0], goal_embed)]], device=device, dtype=torch.float32)
+    return state_embed, action, next_state_embed, reward, next_state
 
-    print("Loaded memory.")
+def create_memories(dqn, epsilon, steps):
+    melee = Melee(**options)
+    melee.reset()
+    for _ in range(steps):
+        state_embed, action, next_state_embed, reward, _ = perform_action(melee, dqn, epsilon)
+        replay_buffer.add(state_embed, action, next_state_embed, reward)
+    melee.close()
 
-    dqn = DQN(state_size=state_size, action_size=action_size)
-#    #dqn.load("checkpoints/agent.pth")
-
-    for reset_count in range(10):
-        for learn_count in range(8000):
+def train_network(dqn, replay_buffer, steps):
+    if len(replay_buffer) > batch_size:
+        for _ in range(steps):
             dqn.learn(replay_buffer.sample(batch_size=batch_size), batch_size)
 
-        print("Learned for a cycle.")
+def check_network_performance(dqn, steps):
+    melee = Melee(**options)
+    state = melee.reset()
+    rewards = deque(maxlen=steps)
+    for _ in range(steps):
+        _, _, _, reward, next_state = perform_action(melee, dqn, 0.0)
+        state = next_state
+        rewards.append(reward[0].item())
+    print("R: %.4f" % np.mean(rewards), "X: %.2f" % state.players[0].x)
+    melee.close()
 
-        rewards = deque(maxlen=7200)
+if __name__ == "__main__":
+    replay_buffer = ReplayBuffer(buffer_size=100000)
+    #replay_buffer.load("replay_memories/memories")
+    #print("Loaded memory.")
 
-        melee = Melee(**options)
-        state = melee.reset()
+    dqn = DQN(state_size=state_size, action_size=action_size)
+    #dqn.load("checkpoints/agent.pth")
 
-        for step_count in range(7200):
-            #if step_count > 0 and step_count % 32 == 0:
-            #    dqn.learn(replay_buffer.sample(batch_size=batch_size), batch_size)
+    for cycle_count in range(training_cycles):
+        #epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * cycle_count / epsilon_decay)
+        #print("Epsilon: %.2f" % epsilon)
+        epsilon = 1.0
 
-            state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
-            action = dqn.act(state_embed, epsilon=0.0)
-            next_state = melee.step(action)
-            next_state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
-            reward = torch.as_tensor([[calculate_reward(state_embed[0], goal_embed)]], device=device, dtype=torch.float32)
-            #replay_buffer.add(state_embed, action, next_state_embed, reward)
+        create_memories(dqn, epsilon, steps=memories_per_cycle)
+        #print("Memories Created")
 
-            state = next_state
-            rewards.append(reward[0].item())
+        train_network(dqn, replay_buffer, steps=3*int(memories_per_cycle/batch_size))
+        #if cycle_count > 0 and cycle_count % 4 == 0:
+        dqn.save("checkpoints/" + str(cycle_count) + ".pth")
 
-        print("R: %.4f" % np.mean(rewards), "X: %.2f" % state.players[0].x)
-        dqn.save("checkpoints/" + str(reset_count) + ".pth")
-        melee.close()
+        check_network_performance(dqn, steps=frames_to_check_performance)
