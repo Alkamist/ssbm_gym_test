@@ -2,8 +2,12 @@ import time
 import math
 import random
 
+import torch
+
 from melee import Melee
 from replay_buffer import ReplayBuffer
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 options = dict(
     windows=True,
@@ -16,7 +20,7 @@ options = dict(
     stage='battlefield',
 )
 
-max_resets = 3
+max_resets = 1
 max_steps_before_reset = 100000
 
 state_size = 792
@@ -36,19 +40,8 @@ def calculate_reward(state_embed, goal_embed):
     reward = 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else -1.0
     return reward
 
-def record_random_memories(step_count, melee, replay_buffer):
-    state_embed = melee.embed_state()
-    action = random.randrange(melee.num_actions)
-    next_state = melee.step(action)
-    next_state_embed = melee.embed_state()
-    reward = calculate_reward(state_embed, goal_embed)
-    replay_buffer.add(state_embed, action, next_state_embed, reward)
-    if step_count % 20000 == 0:
-        replay_buffer.save("replay_memories/memories")
-    return next_state, reward
-
 if __name__ == "__main__":
-    replay_buffer = ReplayBuffer(buffer_size=300000)
+    replay_buffer = ReplayBuffer(buffer_size=100000)
 
     for reset_count in range(max_resets):
         melee = Melee(**options)
@@ -58,11 +51,11 @@ if __name__ == "__main__":
         start_step = 0
         fps = 0
         for step_count in range(max_steps_before_reset):
-            state_embed = melee.embed_state()
-            action = random.randrange(melee.num_actions)
+            state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+            action = torch.tensor([[random.randrange(melee.num_actions)]], device=device, dtype=torch.long)
             next_state = melee.step(action)
-            next_state_embed = melee.embed_state()
-            reward = calculate_reward(state_embed, goal_embed)
+            next_state_embed = torch.as_tensor([melee.embed_state()], device=device, dtype=torch.float32)
+            reward = torch.as_tensor([[calculate_reward(state_embed[0], goal_embed)]], device=device, dtype=torch.float32)
             replay_buffer.add(state_embed, action, next_state_embed, reward)
             if step_count % 20000 == 0:
                 replay_buffer.save("replay_memories/memories")
@@ -78,3 +71,5 @@ if __name__ == "__main__":
                 start_step = step_count
 
         melee.close()
+
+    print("Done!")

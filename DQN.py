@@ -70,12 +70,11 @@ class DQN():
         if random.random() > epsilon:
             self.policy_net.eval()
             with torch.no_grad():
-                state = torch.as_tensor([state], device=device, dtype=torch.float32)
-                action = self.policy_net(state).max(1)[1].item()
+                action = self.policy_net(state).max(1)[1].view(1, 1)
             self.policy_net.train()
             return action
         else:
-            return random.randrange(self.action_size)
+            return torch.tensor([[random.randrange(self.action_size)]], device=device, dtype=torch.long)
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
@@ -91,18 +90,18 @@ class DQN():
         self.policy_net.train()
         self.target_net.eval()
 
-        state_batch = torch.as_tensor([s for s in batch.state], device=device, dtype=torch.float32)
-        action_batch = torch.as_tensor([[a] for a in batch.action], device=device, dtype=torch.long)
-        reward_batch = torch.as_tensor([r for r in batch.reward], device=device, dtype=torch.float32)
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward, 1)
 
         non_final_mask = torch.as_tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device, dtype=torch.bool)
-        non_final_next_states = torch.as_tensor([s for s in batch.next_state if s is not None], device=device, dtype=torch.float32)
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
 
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
         next_state_values = torch.zeros(batch_size, device=device)
         next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
-        expected_state_action_values = (next_state_values * self.gamma) + reward_batch
+        expected_state_action_values = (next_state_values * self.gamma) + reward_batch[0]
 
         loss = self.loss_criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
