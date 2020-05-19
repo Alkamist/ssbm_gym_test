@@ -1,10 +1,7 @@
 import math
-import torch
 
 from melee import Melee
 from DQN import DQN
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 options = dict(
     windows=True,
@@ -33,7 +30,7 @@ def calculate_reward(state_embed, goal_embed):
     x1 = goal_embed[0]
     y1 = goal_embed[1]
     reward = 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else -1.0
-    return torch.tensor([reward], device=device, dtype=torch.float32)
+    return reward
 
 if __name__ == "__main__":
     dqn = DQN(state_size=state_size, action_size=action_size)
@@ -44,14 +41,14 @@ if __name__ == "__main__":
     state = melee.reset()
 
     for step_count in range(99999999999999):
-        state_embed = torch.tensor([melee.embed_state()], device=device, dtype=torch.float32)
+        state_embed = melee.embed_state()
         action = dqn.act(state_embed, epsilon=0.0)
         next_state = melee.step(action)
-        next_state_embed = torch.tensor([melee.embed_state()], device=device, dtype=torch.float32)
-        reward = calculate_reward(state_embed[0], goal_embed)
+        next_state_embed = melee.embed_state()
+        reward = calculate_reward(state_embed, goal_embed)
         state = next_state
 
-        if reward[0].item() >= 1.0:
-            print(reward[0].item())
+        if reward >= 1.0:
+            print(reward)
 
     melee.close()

@@ -70,11 +70,12 @@ class DQN():
         if random.random() > epsilon:
             self.policy_net.eval()
             with torch.no_grad():
-                action = self.policy_net(state).max(1)[1].view(1, 1)
+                state = torch.as_tensor([state], device=device, dtype=torch.float32)
+                action = self.policy_net(state).max(1)[1].item()
             self.policy_net.train()
             return action
         else:
-            return torch.tensor([[random.randrange(self.action_size)]], device=device, dtype=torch.long)
+            return random.randrange(self.action_size)
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
@@ -90,11 +91,12 @@ class DQN():
         self.policy_net.train()
         self.target_net.eval()
 
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        state_batch = torch.as_tensor([s for s in batch.state], device=device, dtype=torch.float32)
+        action_batch = torch.as_tensor([[a] for a in batch.action], device=device, dtype=torch.long)
+        reward_batch = torch.as_tensor([r for r in batch.reward], device=device, dtype=torch.float32)
+
+        non_final_mask = torch.as_tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device, dtype=torch.bool)
+        non_final_next_states = torch.as_tensor([s for s in batch.next_state if s is not None], device=device, dtype=torch.float32)
 
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
