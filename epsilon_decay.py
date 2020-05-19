@@ -1,0 +1,1 @@
+self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * math.exp(-1.0 * self.current_step / self.epsilon_decay)

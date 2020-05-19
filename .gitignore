@@ -105,6 +105,7 @@ venv.bak/
 
 # Custom
 
+replay_memories/*
 dolphin-exe/*
 ISOs/*
 !*/.gitkeep

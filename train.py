@@ -1,11 +1,16 @@
 import time
-from collections import deque
-import numpy as np
 import math
 import random
+from collections import deque
+
+import torch
+import numpy as np
 
 from melee import Melee
-from DQN import Agent
+from replay_buffer import ReplayBuffer
+from DQN import DQN
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 options = dict(
     windows=True,
@@ -18,12 +23,14 @@ options = dict(
     stage='battlefield',
 )
 
-max_resets = 5
-max_steps_before_reset = 105020
+batch_size = 32
 
-episode_length = 600
+max_resets = 3
+max_steps_before_reset = 100000
+
+episode_length = 1200
 state_size = 792
-action_size = 5
+action_size = 30
 
 goal = [25.0, 0.0]
 goal_embed = [goal[0] / 100.0, goal[1] / 100.0]
@@ -36,11 +43,25 @@ def calculate_reward(state_embed, goal_embed):
     y0 = state_embed[1]
     x1 = goal_embed[0]
     y1 = goal_embed[1]
-    return 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else 0.0
+    reward = 1.0 if calculate_distance(x0, y0, x1, y1) < (max_distance_for_reward / 100.0) else -1.0
+    return torch.tensor([reward], device=device, dtype=torch.float32)
+
+def record_random_memories(step_count, melee, replay_buffer):
+    state_embed = melee.embed_state()
+    action = random.randrange(melee.num_actions)
+    next_state = melee.step(action)
+    next_state_embed = melee.embed_state()
+    reward = calculate_reward(state_embed, goal_embed)
+    replay_buffer.add(state_embed, action, next_state_embed, reward)
+    if step_count % 30000 == 0:
+        replay_buffer.save("replay_memories/memories")
+    return next_state, reward
 
 if __name__ == "__main__":
-    agent = Agent(state_size=state_size + 2, action_size=action_size)
-    #agent.load("checkpoints/agent.pth")
+    replay_buffer = ReplayBuffer(buffer_size=300000)
+    #replay_buffer.load("replay_memories/memories")
+    dqn = DQN(state_size=state_size, action_size=action_size)
+    #dqn.load("checkpoints/agent.pth")
 
     for reset_count in range(max_resets):
         melee = Melee(**options)
@@ -48,47 +69,33 @@ if __name__ == "__main__":
 
         rewards = deque(maxlen=3600)
 
-        HER_memory = []
-
         start_time = time.time()
         start_step = 0
         fps = 0
         for step_count in range(max_steps_before_reset):
-            state_embed = melee.embed_state()
-            action = agent.act(state_embed + goal_embed)
-            #action = random.randrange(melee.num_actions)
+            #next_state, reward = record_random_memories(step_count, melee, replay_buffer)
+
+            #for learn_count in range(1000):
+            #    dqn.learn(replay_buffer.sample(batch_size=32))
+
+            state_embed = torch.tensor([melee.embed_state()], device=device, dtype=torch.float32)
+            action = dqn.act(state_embed, epsilon=1.0)
             next_state = melee.step(action)
-            next_state_embed = melee.embed_state()
+            next_state_embed = torch.tensor([melee.embed_state()], device=device, dtype=torch.float32)
+            reward = calculate_reward(state_embed[0], goal_embed)
 
-            reward = calculate_reward(state_embed, goal_embed)
-            done = (step_count > 0 and step_count % episode_length == 0) or (reward >= 1.0)
-
-            agent.step(state_embed + goal_embed, action, reward, next_state_embed + goal_embed, done)
-
-            HER_memory.append([state_embed, action, next_state_embed])
-            if done:
-                # The episode failed.
-                if reward <= 0.0:
-                    new_goal_embed = [state.players[0].x / 100.0, state.players[0].y / 100.0]
-                    for memory in HER_memory:
-                        new_reward = calculate_reward(memory[0], new_goal_embed)
-                        agent.memory.add(memory[0] + new_goal_embed,
-                                        memory[1],
-                                        new_reward,
-                                        memory[2] + new_goal_embed,
-                                        True if new_reward >= 1.0 else False)
-                    HER_memory = []
+            replay_buffer.add(state_embed, action, next_state_embed, reward)
+            if step_count % 4 == 0 and len(replay_buffer) > batch_size:
+                dqn.learn(replay_buffer.sample(batch_size=batch_size), batch_size)
 
             state = next_state
-            rewards.append(reward)
-
+            rewards.append(reward[0].item())
             if step_count > 0 and step_count % 3600 == 0:
-                #print("FPS:", fps, "Steps:", step_count, "R: %.4f" % np.mean(rewards), "X: %.2f" % state.players[0].x)
-                print("FPS:", fps, "Steps:", step_count, "R: %.4f" % np.mean(rewards), "Epsilon: %.4f" % agent.epsilon)
+                print("FPS:", fps, "Steps:", step_count, "R: %.4f" % np.mean(rewards), "X: %.2f" % state.players[0].x)
 
-            # Every 50000 steps save the model.
-            if step_count > 0 and step_count % 50000 == 0:
-                agent.save("checkpoints/" + str(reset_count) + "-" + str(step_count) + ".pth")
+            # Every 20000 steps save the model.
+            if step_count > 0 and step_count % 20000 == 0:
+                dqn.save("checkpoints/" + str(reset_count) + "-" + str(step_count) + ".pth")
 
             current_time = time.time()
             if current_time - start_time >= 1.0:
