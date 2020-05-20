@@ -1,11 +1,13 @@
 from itertools import product
 from copy import deepcopy
 
+import torch
+
 from ssbm_gym.dolphin_api import DolphinAPI
 from ssbm_gym.ssbm import SimpleButton, SimpleController, RealControllerState
 
 max_action = 0x017E
-num_actions = 1 + max_action
+num_melee_actions = 1 + max_action
 num_stages = 32
 num_characters = 32
 
@@ -52,74 +54,108 @@ L_stick = [
     (0.925, 0.25), # Wavedash right full
 ]
 
-controller = []
+_controller = []
 for button, stick in enumerate([NONE_stick, A_stick, B_stick, Z_stick, Y_stick, L_stick]):
-    controller += [SimpleController(*args) for args in product([SimpleButton(button)], stick)]
-controller_states = [a.real_controller for a in controller]
+    _controller += [SimpleController(*args) for args in product([SimpleButton(button)], stick)]
+_controller_states = [a.real_controller for a in _controller]
 
-def is_dying(player):
-    # see https://docs.google.com/spreadsheets/d/1JX2w-r2fuvWuNgGb6D3Cs4wHQKLFegZe2jhbBuIhCG8/edit#gid=13
-    return player.action_state <= 0xA
-
-def one_hot(x, n):
+def _one_hot(x, n):
     y = n * [0.0]
     y[x] = 1.0
     return y
+
+def _wrap_dolphin_player_state(dolphin_state, previous_dolphin_state):
+    return dict(
+        x = dolphin_state.x,
+        y = dolphin_state.y,
+        x_velocity = 0.0 if previous_dolphin_state is None else dolphin_state.x - previous_dolphin_state.x,
+        y_velocity = 0.0 if previous_dolphin_state is None else dolphin_state.y - previous_dolphin_state.y,
+        action_state = dolphin_state.action_state,
+        action_frame = dolphin_state.action_frame,
+        percent = dolphin_state.percent,
+        facing = dolphin_state.facing,
+        invulnerable = dolphin_state.invulnerable,
+        hitlag_frames_left = dolphin_state.hitlag_frames_left,
+        hitstun_frames_left = dolphin_state.hitstun_frames_left,
+        shield_size = dolphin_state.shield_size,
+        in_air = dolphin_state.in_air,
+        jumps_used = dolphin_state.jumps_used,
+    )
+
+def _wrap_dolphin_state(dolphin_state, previous_dolphin_state):
+    if previous_dolphin_state is not None:
+        return {
+            "players": [
+                _wrap_dolphin_player_state(dolphin_state.players[0], previous_dolphin_state.players[0]),
+                _wrap_dolphin_player_state(dolphin_state.players[1], previous_dolphin_state.players[1])
+            ]
+        }
+    else:
+        return {
+            "players": [
+                _wrap_dolphin_player_state(dolphin_state.players[0], None),
+                _wrap_dolphin_player_state(dolphin_state.players[1], None)
+            ]
+        }
+
+def player_state_to_tensor(state):
+    player = torch.tensor([
+        state["x"] / 100.0,
+        state["y"] / 100.0,
+        state["x_velocity"] / 100.0,
+        state["y_velocity"] / 100.0,
+        state["action_frame"] / 30.0,
+        state["percent"] / 100.0,
+        state["facing"],
+        1.0 if state["invulnerable"] else 0.0,
+        state["hitlag_frames_left"] / 30.0,
+        state["hitstun_frames_left"] / 30.0,
+        state["shield_size"] / 60.0,
+        1.0 if state["in_air"] else 0.0,
+        state["jumps_used"],
+        *_one_hot(state["action_state"], num_melee_actions),
+        #*_one_hot(state["character"], num_characters),
+    ], dtype=torch.float32)
+    return player
+
+def melee_state_to_tensor(state):
+    return torch.cat((player_state_to_tensor(state["players"][0]), player_state_to_tensor(state["players"][1]))).unsqueeze(0)
+
+#def percent_taken_by_player(self, player_index):
+#    return self.state.players[player_index].percent - self.state.players[player_index].percent
+
+def _is_dying(player):
+    # see https://docs.google.com/spreadsheets/d/1JX2w-r2fuvWuNgGb6D3Cs4wHQKLFegZe2jhbBuIhCG8/edit#gid=13
+    return player["action_state"] <= 0xA
+
+def player_just_died(state, next_state, player_index):
+    return _is_dying(next_state["players"][player_index]) and not _is_dying(state["players"][player_index])
 
 class Melee():
     def __init__(self, **dolphin_options):
         super(Melee, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
+        self.state_size = 792
+        self.num_actions = 30
         self.has_reset = False
-        self.state = None
-        self.previous_state = None
-
-    def embed_player_state(self, player_index):
-        state = self.state.players[player_index]
-        player = []
-        player.append(state.x / 100.0)
-        player.append(state.y / 100.0)
-        #player += one_hot(state.character, num_characters)
-        player += one_hot(state.action_state, num_actions)
-        player.append(state.action_frame / 30.0)
-        player.append(state.percent / 100.0)
-        player.append(state.facing)
-        player.append(1.0 if state.invulnerable else 0.0)
-        player.append(state.hitlag_frames_left / 30.0)
-        player.append(state.hitstun_frames_left / 30.0)
-        player.append(state.shield_size / 60.0)
-        player.append(1.0 if state.in_air else 0.0)
-        player.append(state.jumps_used)
-        if self.previous_state is not None:
-            previous_state = self.previous_state.players[player_index]
-            player.append((state.x - previous_state.x) / 100.0)
-            player.append((state.y - previous_state.y) / 100.0)
-        else:
-            player.append(0.0)
-            player.append(0.0)
-        return player
-
-    def embed_state(self):
-        return self.embed_player_state(0) + self.embed_player_state(1)
-
-    def percent_taken_by_player(self, player_index):
-        return self.state.players[player_index].percent - self.state.players[player_index].percent
-
-    def player_just_died(self, player_index):
-        return is_dying(self.state.players[player_index]) and not is_dying(self.previous_state.players[player_index])
+        self._dolphin_state = None
+        self._previous_dolphin_state = None
 
     def reset(self):
+        state = None
         if not self.has_reset:
-            self.previous_state = None
-            self.state = self.dolphin.reset()
+            self._previous_dolphin_state = None
+            self._dolphin_state = self.dolphin.reset()
+            state = _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
             self.has_reset = True
-        return self.state
+        return state
 
     def close(self):
         self.dolphin.close()
 
     def step(self, action):
-        if self.state is not None:
-            self.previous_state = deepcopy(self.state)
-        self.state = self.dolphin.step([controller_states[action]])
-        return self.state
+        self._dolphin_state = self.dolphin.step([_controller_states[action]])
+        state = _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
+        if self._dolphin_state is not None:
+            self._previous_dolphin_state = deepcopy(self._dolphin_state)
+        return state
