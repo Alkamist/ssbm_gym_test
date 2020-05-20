@@ -70,9 +70,9 @@ class Melee():
     def __init__(self, **dolphin_options):
         super(Melee, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
+        self.has_reset = False
         self.state = None
         self.previous_state = None
-        self.num_actions = len(controller_states)
 
     def embed_player_state(self, player_index):
         state = self.state.players[player_index]
@@ -109,8 +109,10 @@ class Melee():
         return is_dying(self.state.players[player_index]) and not is_dying(self.previous_state.players[player_index])
 
     def reset(self):
-        self.previous_state = None
-        self.state = self.dolphin.reset()
+        if not self.has_reset:
+            self.previous_state = None
+            self.state = self.dolphin.reset()
+            self.has_reset = True
         return self.state
 
     def close(self):
