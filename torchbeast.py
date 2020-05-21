@@ -37,22 +37,22 @@ options = dict(
     render=True,
     speed=1,
     player1='ai',
-    player2='cpu',
+    player2='human',
     char1='falcon',
     char2='falcon',
-    stage='battlefield',
+    stage='final_destination',
 )
 
 should_train = False
 
-load_checkpoint_name = "torchbeast-20200520-232808"
+load_checkpoint_name = "torchbeast-20200521-104437"
 disable_checkpoint = False
 savedir = "checkpoints"
 save_every = 1 # In minutes.
 
-episode_steps = 600
-num_actors = 5
-total_steps = 500000
+episode_steps = 3600
+num_actors = 6
+total_steps = 2000000
 batch_size = 8
 unroll_length = 80
 num_learner_threads = 2
@@ -74,20 +74,21 @@ grad_norm_clipping = 40.0
 
 Buffers = typing.Dict[str, typing.List[torch.Tensor]]
 
+
 def load_checkpoint():
     return torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
 
 
 def calculate_reward(state, next_state):
     reward = 0.0
-    reward -= max(0.0, 0.005 * (next_state["players"][0]["percent"] - state["players"][0]["percent"]))
-    reward += max(0.0, 0.005 * (next_state["players"][1]["percent"] - state["players"][1]["percent"]))
+    #reward -= max(0.0, 0.005 * (next_state["players"][0]["percent"] - state["players"][0]["percent"]))
+    reward += max(0.0, 0.05 * (next_state["players"][1]["percent"] - state["players"][1]["percent"]))
 
-    if player_just_died(state, next_state, 1):
-        reward = 1.0
+    #if player_just_died(state, next_state, 1):
+    #    reward = 1.0
 
-    if player_just_died(state, next_state, 0):
-        reward = -1.0
+    #if player_just_died(state, next_state, 0):
+    #    reward = -1.0
 
     return reward
 
@@ -191,11 +192,9 @@ class Net(nn.Module):
         self.state_size = state_size
         self.num_actions = num_actions
 
-        # FC output size + one-hot of last action + last reward.
-        core_output_size = state_size + num_actions + 1
-        self.core = nn.LSTM(input_size=core_output_size, hidden_size=core_output_size, num_layers=2)
-        self.policy = nn.Linear(core_output_size, self.num_actions)
-        self.baseline = nn.Linear(core_output_size, 1)
+        self.core = nn.Linear(self.state_size, 512)
+        self.policy = nn.Linear(512, self.num_actions)
+        self.baseline = nn.Linear(512, 1)
 
     def initial_state(self, batch_size):
         if not use_lstm:
@@ -210,30 +209,31 @@ class Net(nn.Module):
         T, B, *_ = x.shape
         x = torch.flatten(x, 0, 1) # Merge time and batch.
 
-        one_hot_last_action = F.one_hot(inputs["last_action"].view(T * B), self.num_actions).float()
-        #print(one_hot_last_action.shape)
-        clipped_reward = torch.clamp(inputs["reward"], -1, 1).view(T * B, 1)
-        #print(clipped_reward.shape)
-        core_input = torch.cat([x, clipped_reward, one_hot_last_action], dim=-1)
-        if use_lstm:
-            core_input = core_input.view(T, B, -1)
-            core_output_list = []
-            notdone = (~inputs["done"]).float()
-            for input, nd in zip(core_input.unbind(), notdone.unbind()):
-                # Reset core state to zero whenever an episode ended.
-                # Make `done` broadcastable with (num_layers, B, hidden_size)
-                # states:
-                nd = nd.view(1, -1, 1)
-                core_state = tuple(nd * s for s in core_state)
-                output, core_state = self.core(input.unsqueeze(0), core_state)
-                core_output_list.append(output)
-            core_output = torch.flatten(torch.cat(core_output_list), 0, 1)
-        else:
-            core_output = core_input
-            core_state = tuple()
+        #one_hot_last_action = F.one_hot(inputs["last_action"].view(T * B), self.num_actions).float()
+        #clipped_reward = torch.clamp(inputs["reward"], -1, 1).view(T * B, 1)
+        #core_input = torch.cat([x, clipped_reward, one_hot_last_action], dim=-1)
 
-        policy_logits = self.policy(core_output)
-        baseline = self.baseline(core_output)
+        #core_input = torch.cat([x, clipped_reward, one_hot_last_action], dim=-1)
+        #if use_lstm:
+        #    core_input = core_input.view(T, B, -1)
+        #    core_output_list = []
+        #    notdone = (~inputs["done"]).float()
+        #    for input, nd in zip(core_input.unbind(), notdone.unbind()):
+        #        # Reset core state to zero whenever an episode ended.
+        #        # Make `done` broadcastable with (num_layers, B, hidden_size)
+        #        # states:
+        #        nd = nd.view(1, -1, 1)
+        #        core_state = tuple(nd * s for s in core_state)
+        #        output, core_state = self.core(input.unsqueeze(0), core_state)
+        #        core_output_list.append(output)
+        #    core_output = torch.flatten(torch.cat(core_output_list), 0, 1)
+        #else:
+        #    core_output = core_input
+        #    core_state = tuple()
+
+        x = F.relu(self.core(x))
+        policy_logits = self.policy(x)
+        baseline = self.baseline(x)
 
         if self.training:
             action = torch.multinomial(F.softmax(policy_logits, dim=1), num_samples=1)
