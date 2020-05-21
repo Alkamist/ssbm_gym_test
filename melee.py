@@ -140,15 +140,14 @@ class Melee():
         self.has_reset = False
         self._dolphin_state = None
         self._previous_dolphin_state = None
+        self.step_count_without_reset = 0
 
     def reset(self):
-        state = None
         if not self.has_reset:
             self._previous_dolphin_state = None
             self._dolphin_state = self.dolphin.reset()
-            state = _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
             self.has_reset = True
-        return state
+        return _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
 
     def close(self):
         self.dolphin.close()
@@ -158,4 +157,8 @@ class Melee():
         state = _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
         if self._dolphin_state is not None:
             self._previous_dolphin_state = deepcopy(self._dolphin_state)
+        #if self.step_count_without_reset >= 72000:
+        #    self.has_reset = False
+        #    self.step_count_without_reset = 0
+        #self.step_count_without_reset += 1
         return state

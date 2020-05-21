@@ -45,13 +45,13 @@ options = dict(
 
 should_train = False
 
-load_checkpoint_name = "torchbeast-20200520-201117"
+load_checkpoint_name = "torchbeast-20200520-232808"
 disable_checkpoint = False
 savedir = "checkpoints"
 save_every = 1 # In minutes.
 
-episode_steps = 3600
-num_actors = 4
+episode_steps = 600
+num_actors = 5
 total_steps = 500000
 batch_size = 8
 unroll_length = 80
@@ -74,11 +74,14 @@ grad_norm_clipping = 40.0
 
 Buffers = typing.Dict[str, typing.List[torch.Tensor]]
 
+def load_checkpoint():
+    return torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+
 
 def calculate_reward(state, next_state):
     reward = 0.0
-    reward -= max(0.0, 0.001 * (next_state["players"][0]["percent"] - state["players"][0]["percent"]))
-    reward += max(0.0, 0.001 * (next_state["players"][1]["percent"] - state["players"][1]["percent"]))
+    reward -= max(0.0, 0.005 * (next_state["players"][0]["percent"] - state["players"][0]["percent"]))
+    reward += max(0.0, 0.005 * (next_state["players"][1]["percent"] - state["players"][1]["percent"]))
 
     if player_just_died(state, next_state, 1):
         reward = 1.0
@@ -97,6 +100,8 @@ def create_env(worker_id=0):
     if worker_id == 0:
         options["render"] = True
         options["speed"] = 1
+        #options["render"] = False
+        #options["speed"] = 0
     else:
         options["render"] = False
         options["speed"] = 0
@@ -433,6 +438,10 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
     xpid = "torchbeast-%s" % time.strftime("%Y%m%d-%H%M%S")
     checkpointpath = "%s/%s%s" % (savedir, xpid, ".tar")
 
+    checkpoint = None
+    if load_checkpoint_name:
+        checkpoint = load_checkpoint()
+
     num_buffers = max(2 * num_actors, batch_size)
     if num_actors >= num_buffers:
         raise ValueError("num_buffers should be larger than num_actors")
@@ -445,9 +454,9 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
     env = create_env()
 
     model = Net(env.state_size, env.num_actions)
-    if load_checkpoint_name:
-        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+    if checkpoint:
         model.load_state_dict(checkpoint["model_state_dict"])
+
     buffers = create_buffers(env.state_size, model.num_actions, num_buffers)
 
     model.share_memory()
@@ -481,8 +490,7 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
         actor_processes.append(actor)
 
     learner_model = Net(env.state_size, env.num_actions).to(device=device)
-    if load_checkpoint_name:
-        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+    if checkpoint:
         learner_model.load_state_dict(checkpoint["model_state_dict"])
 
     optimizer = torch.optim.RMSprop(
@@ -492,11 +500,15 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
         eps=epsilon,
         alpha=alpha,
     )
+    if checkpoint:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     def lr_lambda(epoch):
         return 1 - min(epoch * T * B, total_steps) / total_steps
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    if checkpoint:
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
     logger = logging.getLogger("logfile")
     stat_keys = [
@@ -546,7 +558,7 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
         thread.start()
         threads.append(thread)
 
-    def checkpoint():
+    def save_checkpoint():
         if disable_checkpoint:
             return
         logging.info("Saving checkpoint to %s", checkpointpath)
@@ -567,11 +579,12 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
             start_time = timer()
             time.sleep(5)
 
-            if timer() - last_checkpoint_time > save_every * 60:
-                checkpoint()
+            sps = (step - start_step) / (timer() - start_time)
+
+            if sps > 30 and (timer() - last_checkpoint_time > save_every * 60):
+                save_checkpoint()
                 last_checkpoint_time = timer()
 
-            sps = (step - start_step) / (timer() - start_time)
             if stats.get("episode_returns", None):
                 mean_return = (
                     "Return per episode: %.1f. " % stats["mean_episode_return"]
@@ -599,14 +612,14 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
         for actor in actor_processes:
             actor.join(timeout=1)
 
-    checkpoint()
+    save_checkpoint()
 
 def test(num_episodes: int = 10):
     env = create_env()
     model = Net(env.state_size, env.num_actions)
     model.eval()
     if load_checkpoint_name:
-        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+        checkpoint = load_checkpoint()
         model.load_state_dict(checkpoint["model_state_dict"])
 
     #agent_state = model.initial_state(batch_size=1)
