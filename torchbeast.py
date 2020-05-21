@@ -43,17 +43,20 @@ options = dict(
     stage='battlefield',
 )
 
+should_train = False
+
+load_checkpoint_name = "torchbeast-20200520-201117"
 disable_checkpoint = False
 savedir = "checkpoints"
 save_every = 1 # In minutes.
 
 episode_steps = 3600
-num_actors = 1
-total_steps= 100000
+num_actors = 4
+total_steps = 500000
 batch_size = 8
 unroll_length = 80
 num_learner_threads = 2
-use_lstm = True
+use_lstm = False
 
 # Loss settings.
 entropy_cost = 0.0006
@@ -74,6 +77,8 @@ Buffers = typing.Dict[str, typing.List[torch.Tensor]]
 
 def calculate_reward(state, next_state):
     reward = 0.0
+    reward -= max(0.0, 0.001 * (next_state["players"][0]["percent"] - state["players"][0]["percent"]))
+    reward += max(0.0, 0.001 * (next_state["players"][1]["percent"] - state["players"][1]["percent"]))
 
     if player_just_died(state, next_state, 1):
         reward = 1.0
@@ -83,7 +88,18 @@ def calculate_reward(state, next_state):
 
     return reward
 
+#def calculate_reward(state, next_state):
+#    return 1.0 / episode_steps if abs(next_state["players"][0]["x"] - 25.0) < 5.0 else 0.0
+
 def create_env(worker_id=0):
+    global options
+    options = deepcopy(options)
+    if worker_id == 0:
+        options["render"] = True
+        options["speed"] = 1
+    else:
+        options["render"] = False
+        options["speed"] = 0
     return Environment(Melee(worker_id=worker_id, **options))
 
 class Environment:
@@ -117,7 +133,7 @@ class Environment:
         self._next_state = self.env.step(action.item())
         frame = melee_state_to_tensor(self._next_state).unsqueeze(0)
         reward = calculate_reward(self._state, self._next_state)
-        done = self.episode_step[0].item() >= episode_steps
+        done = self.episode_step[0].item() >= (episode_steps - 1)
 
         self.episode_step += 1
         self.episode_return += reward
@@ -186,13 +202,14 @@ class Net(nn.Module):
 
     def forward(self, inputs, core_state=()):
         x = inputs["frame"]
-        T, B, _ = x.shape
+        T, B, *_ = x.shape
         x = torch.flatten(x, 0, 1) # Merge time and batch.
 
         one_hot_last_action = F.one_hot(inputs["last_action"].view(T * B), self.num_actions).float()
+        #print(one_hot_last_action.shape)
         clipped_reward = torch.clamp(inputs["reward"], -1, 1).view(T * B, 1)
+        #print(clipped_reward.shape)
         core_input = torch.cat([x, clipped_reward, one_hot_last_action], dim=-1)
-
         if use_lstm:
             core_input = core_input.view(T, B, -1)
             core_output_list = []
@@ -428,6 +445,9 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
     env = create_env()
 
     model = Net(env.state_size, env.num_actions)
+    if load_checkpoint_name:
+        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+        model.load_state_dict(checkpoint["model_state_dict"])
     buffers = create_buffers(env.state_size, model.num_actions, num_buffers)
 
     model.share_memory()
@@ -461,6 +481,9 @@ def train(): # pylint: disable=too-many-branches, too-many-statements
         actor_processes.append(actor)
 
     learner_model = Net(env.state_size, env.num_actions).to(device=device)
+    if load_checkpoint_name:
+        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+        learner_model.load_state_dict(checkpoint["model_state_dict"])
 
     optimizer = torch.optim.RMSprop(
         learner_model.parameters(),
@@ -582,15 +605,17 @@ def test(num_episodes: int = 10):
     env = create_env()
     model = Net(env.state_size, env.num_actions)
     model.eval()
-    checkpoint = torch.load("checkpoints/torchbeast-20200520-155918.tar", map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"])
+    if load_checkpoint_name:
+        checkpoint = torch.load("checkpoints/" + load_checkpoint_name + ".tar", map_location="cpu")
+        model.load_state_dict(checkpoint["model_state_dict"])
 
-    agent_state = model.initial_state(batch_size=1)
+    #agent_state = model.initial_state(batch_size=1)
     observation = env.initial()
     returns = []
 
     while len(returns) < num_episodes:
-        policy_outputs, agent_state = model(observation, agent_state)
+        policy_outputs, _ = model(observation)
+        #policy_outputs, agent_state = model(observation, agent_state)
         observation = env.step(policy_outputs["action"])
         if observation["done"].item():
             returns.append(observation["episode_return"].item())
@@ -606,5 +631,7 @@ def test(num_episodes: int = 10):
 
 
 if __name__ == "__main__":
-    train()
-    #test(10)
+    if should_train:
+        train()
+    else:
+        test(10)
