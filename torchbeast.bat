@@ -1,2 +1,0 @@
-python torchbeast.py
-pause

@@ -1,7 +1,9 @@
 from itertools import product
 from copy import deepcopy
 
+import numpy as np
 import torch
+from torch import nn
 
 from ssbm_gym.dolphin_api import DolphinAPI
 from ssbm_gym.ssbm import SimpleButton, SimpleController, RealControllerState
@@ -64,62 +66,28 @@ def _one_hot(x, n):
     y[x] = 1.0
     return y
 
-def _wrap_dolphin_player_state(dolphin_state, previous_dolphin_state):
-    return dict(
-        x = dolphin_state.x,
-        y = dolphin_state.y,
-        x_velocity = 0.0 if previous_dolphin_state is None else dolphin_state.x - previous_dolphin_state.x,
-        y_velocity = 0.0 if previous_dolphin_state is None else dolphin_state.y - previous_dolphin_state.y,
-        action_state = dolphin_state.action_state,
-        action_frame = dolphin_state.action_frame,
-        percent = dolphin_state.percent,
-        facing = dolphin_state.facing,
-        invulnerable = dolphin_state.invulnerable,
-        hitlag_frames_left = dolphin_state.hitlag_frames_left,
-        hitstun_frames_left = dolphin_state.hitstun_frames_left,
-        shield_size = dolphin_state.shield_size,
-        in_air = dolphin_state.in_air,
-        jumps_used = dolphin_state.jumps_used,
-    )
+def get_player_state(state):
+    return np.array([
+        state.action_state,
+        state.x / 100.0,
+        state.y / 100.0,
+        state.action_frame / 30.0,
+        state.percent / 100.0,
+        state.facing,
+        1.0 if state.invulnerable else 0.0,
+        state.hitlag_frames_left / 30.0,
+        state.hitstun_frames_left / 30.0,
+        state.shield_size / 60.0,
+        1.0 if state.in_air else 0.0,
+        state.jumps_used,
+        #*_one_hot(state.action_state, num_melee_actions),
+        #*_one_hot(state.character, num_characters),
+    ])
 
-def _wrap_dolphin_state(dolphin_state, previous_dolphin_state):
-    if previous_dolphin_state is not None:
-        return {
-            "players": [
-                _wrap_dolphin_player_state(dolphin_state.players[0], previous_dolphin_state.players[0]),
-                _wrap_dolphin_player_state(dolphin_state.players[1], previous_dolphin_state.players[1])
-            ]
-        }
-    else:
-        return {
-            "players": [
-                _wrap_dolphin_player_state(dolphin_state.players[0], None),
-                _wrap_dolphin_player_state(dolphin_state.players[1], None)
-            ]
-        }
-
-def player_state_to_tensor(state):
-    player = torch.tensor([
-        state["x"] / 100.0,
-        state["y"] / 100.0,
-        state["x_velocity"] / 100.0,
-        state["y_velocity"] / 100.0,
-        state["action_frame"] / 30.0,
-        state["percent"] / 100.0,
-        state["facing"],
-        1.0 if state["invulnerable"] else 0.0,
-        state["hitlag_frames_left"] / 30.0,
-        state["hitstun_frames_left"] / 30.0,
-        state["shield_size"] / 60.0,
-        1.0 if state["in_air"] else 0.0,
-        state["jumps_used"],
-        *_one_hot(state["action_state"], num_melee_actions),
-        #*_one_hot(state["character"], num_characters),
-    ], dtype=torch.float32)
-    return player
-
-def melee_state_to_tensor(state):
-    return torch.cat((player_state_to_tensor(state["players"][0]), player_state_to_tensor(state["players"][1]))).unsqueeze(0)
+def melee_state_to_tensor(state, device):
+    player1 = get_player_state(state.players[0])
+    player2 = get_player_state(state.players[1])
+    return torch.tensor([np.concatenate((player1, player2))], device=device, dtype=torch.float32).unsqueeze(0)
 
 #def percent_taken_by_player(self, player_index):
 #    return self.state.players[player_index].percent - self.state.players[player_index].percent
@@ -135,30 +103,14 @@ class Melee():
     def __init__(self, **dolphin_options):
         super(Melee, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
-        self.state_size = 792
+        self.state_size = 24
         self.num_actions = 30
-        self.has_reset = False
-        self._dolphin_state = None
-        self._previous_dolphin_state = None
-        self.step_count_without_reset = 0
 
     def reset(self):
-        if not self.has_reset:
-            self._previous_dolphin_state = None
-            self._dolphin_state = self.dolphin.reset()
-            self.has_reset = True
-        return _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
+        return self.dolphin.reset()
 
     def close(self):
         self.dolphin.close()
 
     def step(self, action):
-        self._dolphin_state = self.dolphin.step([_controller_states[action]])
-        state = _wrap_dolphin_state(self._dolphin_state, self._previous_dolphin_state)
-        if self._dolphin_state is not None:
-            self._previous_dolphin_state = deepcopy(self._dolphin_state)
-        #if self.step_count_without_reset >= 72000:
-        #    self.has_reset = False
-        #    self.step_count_without_reset = 0
-        #self.step_count_without_reset += 1
-        return state
+        return self.dolphin.step([_controller_states[action]])
