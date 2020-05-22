@@ -17,39 +17,35 @@ class Actor(object):
     def initialize(self):
         if self.env is None:
             self.env = self.create_env_fn()
-        self.policy = Policy(self.env.action_space.n).to(self.device)
+        self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
         self.memory = Memory()
 
     def performing(self):
         self.initialize()
-        obs = self.env.reset()
         with torch.no_grad():
             while True:
                 self.policy.load_state_dict(self.shared_state_dict.state_dict())
 
-                try:
-                    self.policy.reset_rnn()
-                    obs = self.env.reset()
-                except:
-                    obs = obs[-1:]
-                    print(obs.shape)
-
-                self.memory.observations.append(obs)
+                #self.policy.reset_rnn()
+                observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
 
                 for _ in range(self.episode_steps):
-                    action, action_log_prob = self.policy(obs)
-                    self.memory.actions.append(action)
-                    self.memory.actions_log_probs.append(action_log_prob)
+                    action, action_log_prob = self.policy(observation)
 
                     send_action = action[-1].cpu().numpy()
-                    obs, reward, done = self.env.step(send_action)
-                    self.memory.observations.append(obs)
-                    self.memory.rewards.append(torch.from_numpy(reward.astype(np.float32)))
+                    observation, reward, _, _ = self.env.step(send_action)
+                    observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
+                    reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
 
-                action, action_log_prob = self.policy(obs)
-                self.memory.actions.append(action[0:-1])
-                self.memory.actions_log_probs.append(action_log_prob[0:-1])
+                    self.memory.actions.append(action)
+                    self.memory.actions_log_probs.append(action_log_prob)
+                    self.memory.observations.append(observation)
+                    self.memory.rewards.append(reward)
 
+#                action, action_log_prob = self.policy(obs)
+#                self.memory.actions.append(action[0:-1])
+#                self.memory.actions_log_probs.append(action_log_prob[0:-1])
+#
                 self.rollout_queue.put(self.memory.get_batch())
 
 class Memory:

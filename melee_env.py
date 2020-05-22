@@ -108,7 +108,7 @@ class MeleeActionSpace():
 
 class MeleeEnv():
     num_actions = 30
-    observation_size = 24
+    observation_size = 22
 
     def __init__(self, act_every=2, episode_length=600, **dolphin_options):
         super(MeleeEnv, self).__init__()
@@ -149,7 +149,7 @@ class MeleeEnv():
 
     def _player_state_to_numpy(self, state):
         return np.array([
-            state.action_state,
+            #state.action_state,
             #state.character,
             state.x / 100.0,
             state.y / 100.0,
