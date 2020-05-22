@@ -11,6 +11,7 @@ import time
 import random
 import functools
 import atexit
+import platform
 
 from . import ssbm, state_manager, util
 from .dolphin import DolphinRunner, Player
@@ -26,7 +27,6 @@ def mw_tcp_port_from_worker_id(worker_id):
 class DolphinAPI(Default):
     _options = [
         Option('zmq', type=int, default=1, help="use zmq for memory watcher"),
-        Option('windows', action="store_true", default=False, help="to be define if the plateform is Windows"),
         # Option('start', type=int, default=1, help="start game in endless time mode"),
         # Option('debug', type=int, default=0),
     ]
@@ -35,7 +35,9 @@ class DolphinAPI(Default):
     ]
 
     def __init__(self, **kwargs):
-        Default.__init__(self, **kwargs)
+        self.windows = platform.system() == "Windows"
+
+        Default.__init__(self, windows=self.windows, **kwargs)
 
         self.worker_id = kwargs.get("worker_id") or 0
 
