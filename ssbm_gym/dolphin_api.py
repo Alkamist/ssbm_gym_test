@@ -21,17 +21,6 @@ from .pad import *
 from . import ctype_util as ct
 from .default import *
 
-def get_worker_id():
-    file_name = "temp_worker_id"
-    max_workers = 1024
-    worker_id = 0
-    if os.path.exists(file_name):
-        with open(file_name, 'r') as f:
-            worker_id = int(f.read())
-    with open(file_name, 'w') as f:
-        f.write(str((worker_id + 1) % (max_workers - 1)))
-    return worker_id
-
 def mw_tcp_port_from_worker_id(worker_id):
     return 5555 + worker_id
 
@@ -50,12 +39,12 @@ class DolphinAPI(Default):
 
         Default.__init__(self, windows=self.windows, **kwargs)
 
-        #self.worker_id = kwargs.get("worker_id") or 0
+        self.worker_id = kwargs.get("worker_id") or 0
 
         #self.user = os.path.expanduser(self.user)
         self.user = self.dolphin.user
 
-        self.worker_id = get_worker_id()
+        #self.worker_id = get_worker_id()
 
         # set up players
         self.pids = []

@@ -15,8 +15,8 @@ from experience_buffer import ExperienceBuffer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 melee_options = dict(
-    render=True,
-    speed=1,
+    render=False,
+    speed=0,
     player1='ai',
     player2='human',
     char1='falcon',
@@ -25,8 +25,8 @@ melee_options = dict(
 )
 
 num_actors = 2
-workers_per_actor = 2
-batch_size = 128
+workers_per_actor = 4
+batch_size = 64
 load_model = None
 reset_policy = False
 
@@ -44,8 +44,10 @@ def create_shared_state_dict():
     shared_state_dict = shared_state_dict.share_memory()
     return shared_state_dict
 
-def create_vectorized_env():
-    return VectorizedEnv([lambda : MeleeEnv(**melee_options) for _ in range(workers_per_actor)])
+def create_vectorized_env(actor_rank):
+    def get_melee_env_fn(worker_id):
+        return lambda : MeleeEnv(worker_id=worker_id + (actor_rank * workers_per_actor), **melee_options)
+    return VectorizedEnv([get_melee_env_fn(worker_id) for worker_id in range(workers_per_actor)])
 
 if __name__ == "__main__":
     processes = []
@@ -57,17 +59,34 @@ if __name__ == "__main__":
 
     shared_state_dict = create_shared_state_dict()
 
-    learner = Learner(experience_buffer.queue_batch, shared_state_dict)
+    learner = Learner(
+        observation_size=MeleeEnv.observation_size,
+        num_actions=MeleeEnv.num_actions,
+        lr=3e-5,
+        c_hat=1.0,
+        rho_hat=1.0,
+        gamma=0.997,
+        value_loss_coef=0.5,
+        entropy_coef=0.0025,
+        max_grad_norm=0.5,
+        seed=2020,
+        max_batch_repeat=3,
+        queue_batch=experience_buffer.queue_batch,
+        shared_state_dict=shared_state_dict,
+        device=device,
+    )
 
     actors = []
-    for _ in range(num_actors):
+    for rank in range(num_actors):
         actors.append(Actor(
             create_env_fn=create_vectorized_env,
-            episode_steps=600,
+            episode_steps=300,
             rollout_queue=experience_buffer.queue_trace,
             shared_state_dict=shared_state_dict,
-            device=device
+            device=device,
+            rank=rank,
         ))
+
     for actor in actors:
         p = mp.Process(target=actor.performing)
         p.start()
@@ -77,26 +96,3 @@ if __name__ == "__main__":
 
     for p in processes:
         p.join()
-
-#if __name__ == "__main__":
-#    try:
-#        env = VectorizedEnv([lambda : MeleeEnv(**melee_options) for _ in range(2)])
-#        #env = MeleeEnv(**melee_options)
-#        observation = env.reset()
-#
-#        #start_time = timeit.default_timer()
-#        #fps = 0
-#        while True:
-#            action = [env.action_space.sample(), env.action_space.sample()]
-#            observation, reward, done, _ = env.step(action)
-#
-#            #if reward != 0.0:
-#            #    print(reward)
-#
-#            #fps += 1
-#            #if timeit.default_timer() - start_time >= 1.0:
-#            #    print("FPS: %.1f" % fps)
-#            #    fps = 0
-#            #    start_time = timeit.default_timer()
-#    except KeyboardInterrupt:
-#        env.close()
