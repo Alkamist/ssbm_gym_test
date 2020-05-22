@@ -1,44 +1,42 @@
 import numpy as np
 import torch
-from env import Env
+
 from models import Policy
 
 class Actor(object):
-    def __init__(self, args, rollout_queue, shared_state_dict, actor_name=None, rank=0):
-        self.args = args
+    def __init__(self, create_env_fn, episode_steps, rollout_queue, shared_state_dict, device):
+        self.create_env_fn = create_env_fn
+        self.episode_steps = episode_steps
         self.rollout_queue = rollout_queue
-        self.actor_name = actor_name
-        self.rank = rank
-        # self.device = 'cpu'  # args.device
-        self.device = args.device
+        self.shared_state_dict = shared_state_dict
+        self.device = device
         self.env = None
         self.policy = None
         self.memory = None
-        self.shared_state_dict = shared_state_dict
 
     def initialize(self):
-        print('Build Environment for {}'.format(self.actor_name))
         if self.env is None:
-            self.env = Env(self.args, self.device, options=self.args.options, dummy=self.args.dummy, rank=self.rank)
-        self.policy = Policy(self.env.action_dim).to(self.device)
+            self.env = self.create_env_fn()
+        self.policy = Policy(self.env.action_space.n).to(self.device)
         self.memory = Memory()
 
     def performing(self):
-        torch.manual_seed(self.args.seed + self.rank)
         self.initialize()
         obs = self.env.reset()
         with torch.no_grad():
             while True:
                 self.policy.load_state_dict(self.shared_state_dict.state_dict())
+
                 try:
                     self.policy.reset_rnn()
                     obs = self.env.reset()
                 except:
                     obs = obs[-1:]
                     print(obs.shape)
+
                 self.memory.observations.append(obs)
-                # print(obs.shape)
-                for step in range(self.args.num_steps):
+
+                for _ in range(self.episode_steps):
                     action, action_log_prob = self.policy(obs)
                     self.memory.actions.append(action)
                     self.memory.actions_log_probs.append(action_log_prob)
@@ -48,19 +46,16 @@ class Actor(object):
                     self.memory.observations.append(obs)
                     self.memory.rewards.append(torch.from_numpy(reward.astype(np.float32)))
 
-                    # print("actor", obs.shape, action.shape, action_log_prob.shape, reward.shape)
                 action, action_log_prob = self.policy(obs)
                 self.memory.actions.append(action[0:-1])
                 self.memory.actions_log_probs.append(action_log_prob[0:-1])
 
-                # print(self.rollout_queue.qsize())
                 self.rollout_queue.put(self.memory.get_batch())
-
 
 class Memory:
     def __init__(self):
         self.clear_memory()
-    
+
     def clear_memory(self):
         self.observations = []
         self.actions = []
