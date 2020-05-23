@@ -1,8 +1,5 @@
-import os
 import time
 import queue
-from copy import deepcopy
-from collections import deque
 
 import torch
 from torch import nn
@@ -13,13 +10,14 @@ from models import Policy
 
 class Learner(object):
     def __init__(self, observation_size, num_actions, lr, discounting, baseline_cost,
-                 entropy_cost, grad_norm_clipping, seed, episode_steps, queue_batch,
-                 shared_state_dict, device):
+                 entropy_cost, grad_norm_clipping, save_interval, seed, episode_steps,
+                 queue_batch, shared_state_dict, device):
         self.discounting = discounting
         self.baseline_cost = baseline_cost
         self.entropy_cost = entropy_cost
         self.grad_norm_clipping = grad_norm_clipping
         self.seed = seed
+        self.save_interval = save_interval
         self.device = device
         self.queue_batch = queue_batch
         self.shared_state_dict = shared_state_dict
@@ -34,7 +32,11 @@ class Learner(object):
     def learning(self):
         torch.manual_seed(self.seed)
 
+        i = 0
+        t = time.perf_counter()
         while True:
+            i += 1
+
             try:
                 actor_observations, actor_actions, actor_rewards, actor_dones, actor_logits, actor_baselines, actor_rnn_states = self.queue_batch.get(block=True)
             except queue.Empty:
@@ -86,7 +88,24 @@ class Learner(object):
 
             self.update_shared_state_dict()
 
-            print(total_loss)
+            if (i % self.save_interval == 0):
+                torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+
+            t_ = time.perf_counter()
+            delta_t = t_ - t
+            steps = (actor_observations.shape[0] - 1) * actor_observations.shape[1]
+            if delta_t > 0.0:
+                print("FPS {:.1f} / Total steps {} / Baseline loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
+                        steps / (t_ - t),
+                        steps * i,
+                        baseline_loss,
+                        pg_loss,
+                        entropy_loss,
+                        total_loss,
+                        actor_rewards.mean().item(),
+                    )
+                )
+            t = t_
 
             time.sleep(0.1)
 

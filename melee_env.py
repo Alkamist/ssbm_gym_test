@@ -15,46 +15,46 @@ num_characters = 32
 
 
 NONE_stick = [
-    (0.5, 0.5), # Middle
-    (0.5, 0.0), # Down
-    (0.5, 1.0), # Up
+    #(0.5, 0.5), # Middle
+    #(0.5, 0.0), # Down
+    #(0.5, 1.0), # Up
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    (0.35, 0.5), # Walk left
-    (0.65, 0.5), # Walk right
+    #(0.35, 0.5), # Walk left
+    #(0.65, 0.5), # Walk right
 ]
 A_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down smash
-    (0.5, 1.0), # Up smash
-    (0.0, 0.5), # Left smash
-    (1.0, 0.5), # Right smash
-    (0.35, 0.5), # Left tilt
-    (0.65, 0.5), # Right tilt
-    (0.5, 0.35), # Down tilt
-    (0.5, 0.65), # Up tilt
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down smash
+    #(0.5, 1.0), # Up smash
+    #(0.0, 0.5), # Left smash
+    #(1.0, 0.5), # Right smash
+    #(0.35, 0.5), # Left tilt
+    #(0.65, 0.5), # Right tilt
+    #(0.5, 0.35), # Down tilt
+    #(0.5, 0.65), # Up tilt
 ]
 B_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down
-    (0.5, 1.0), # Up
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down
+    #(0.5, 1.0), # Up
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 Z_stick = [
-    (0.5, 0.5), # Neutral
+    #(0.5, 0.5), # Neutral
 ]
 Y_stick = [
-    (0.5, 0.5), # Neutral
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 L_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 1.0), # Up
-    (0.5, 0.0), # Down
-    (0.075, 0.25), # Wavedash left full
-    (0.925, 0.25), # Wavedash right full
+    #(0.5, 0.5), # Neutral
+    #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
+    #(0.075, 0.25), # Wavedash left full
+    #(0.925, 0.25), # Wavedash right full
 ]
 
 _controller = []
@@ -67,12 +67,12 @@ class MeleeObservationSpace():
         self.n = n
 
 class MeleeActionSpace():
-    def __init__(self, n):
+    def __init__(self, n, seed):
         assert n >= 0
         self.dtype = np.int64
         self.n = n
         self.np_random = None
-        self.seed()
+        self.seed(seed)
 
     def sample(self):
         return self.np_random.randint(self.n)
@@ -107,14 +107,15 @@ class MeleeActionSpace():
 
 
 class MeleeEnv():
-    num_actions = 30
-    observation_size = 22
+    num_actions = 2
+    observation_size = 8
 
-    def __init__(self, act_every=6, episode_length=600, **dolphin_options):
+    def __init__(self, act_every=6, seed=None, **dolphin_options):
         super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
         self.act_every = act_every
-        self.action_space = MeleeActionSpace(self.num_actions)
+        self.seed = seed
+        self.action_space = MeleeActionSpace(self.num_actions, seed)
         self.observation_space = MeleeObservationSpace(self.observation_size)
         self._has_reset_once = False
         self._previous_dolphin_state = None
@@ -149,15 +150,15 @@ class MeleeEnv():
             #state.action_state,
             state.x / 100.0,
             state.y / 100.0,
-            state.action_frame / 30.0,
-            state.percent / 100.0,
+            #state.action_frame / 30.0,
+            #state.percent / 100.0,
             state.facing,
-            1.0 if state.invulnerable else 0.0,
-            state.hitlag_frames_left / 30.0,
-            state.hitstun_frames_left / 30.0,
-            state.shield_size / 60.0,
+            #1.0 if state.invulnerable else 0.0,
+            #state.hitlag_frames_left / 30.0,
+            #state.hitstun_frames_left / 30.0,
+            #state.shield_size / 60.0,
             1.0 if state.in_air else 0.0,
-            state.jumps_used,
+            #state.jumps_used,
         ])
 
     def _dolphin_state_to_numpy(self, state):
@@ -166,15 +167,18 @@ class MeleeEnv():
         return np.concatenate((player1, player2))
 
     def _compute_reward(self):
-        reward = 0.0
+        return 1.0 if abs(self._dolphin_state.players[0].x - 25.0) < 5.0 else 0.0
 
-        if self._player_just_died(1):
-            reward = 1.0
-
-        if self._player_just_died(0):
-            reward = -1.0
-
-        return reward
+#    def _compute_reward(self):
+#        reward = 0.0
+#
+#        if self._player_just_died(1):
+#            reward = 1.0
+#
+#        if self._player_just_died(0):
+#            reward = -1.0
+#
+#        return reward
 
     def _percent_taken_by_player(self, player_index):
         return max(0, self._dolphin_state.players[player_index].percent - self._previous_dolphin_state.players[player_index].percent)

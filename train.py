@@ -1,5 +1,3 @@
-import timeit
-import random
 from copy import deepcopy
 
 import torch
@@ -22,34 +20,23 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='battlefield',
-    act_every=1,
+    act_every=6,
 )
 
-num_actors = 2
-workers_per_actor = 2
-batch_size = 8
-episode_steps = 20
+num_actors = 3
+workers_per_actor = 5
+batch_size = 64
+episode_steps = 600
 seed = 2020
-load_model = None
-reset_policy = False
-
-# Initialize shared memory used between the workers and
-# the learner that contains the actor parameters.
-def create_shared_state_dict():
-    shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
-
-    #if load_model is not None:
-    #    partial_load(shared_state_dict, load_model)
-    #    if reset_policy:
-    #        shared_state_dict.policy.weight.data.zero_()
-    #        shared_state_dict.policy.bias.data.zero_()
-
-    shared_state_dict = shared_state_dict.share_memory()
-    return shared_state_dict
 
 def create_vectorized_env(actor_rank):
     def get_melee_env_fn(worker_id):
-        return lambda : MeleeEnv(worker_id=worker_id + (actor_rank * workers_per_actor), **melee_options)
+        global melee_options
+        unique_id = worker_id + (actor_rank * workers_per_actor)
+        modified_melee_options = deepcopy(melee_options)
+        if unique_id == 1:
+            modified_melee_options["render"] = True
+        return lambda : MeleeEnv(worker_id=unique_id, **modified_melee_options)
     return VectorizedEnv([get_melee_env_fn(worker_id) for worker_id in range(workers_per_actor)])
 
 if __name__ == "__main__":
@@ -60,7 +47,8 @@ if __name__ == "__main__":
     p.start()
     processes.append(p)
 
-    shared_state_dict = create_shared_state_dict()
+    shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
+    shared_state_dict.share_memory()
 
     learner = Learner(
         observation_size=MeleeEnv.observation_size,
@@ -70,6 +58,7 @@ if __name__ == "__main__":
         baseline_cost=0.5,
         entropy_cost=0.0006,
         grad_norm_clipping=40.0,
+        save_interval=2,
         seed=seed,
         episode_steps=episode_steps,
         queue_batch=experience_buffer.queue_batch,

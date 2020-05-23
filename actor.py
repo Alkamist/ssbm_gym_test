@@ -22,7 +22,7 @@ class Actor(object):
         if self.env is None:
             self.env = self.create_env_fn(self.rank)
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
-        self.rnn_state = torch.zeros(1, self.num_workers, self.policy.rnn_hidden_size, dtype=torch.float32, device=self.device)
+        self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
         self.memory = Memory()
 
     def performing(self):
