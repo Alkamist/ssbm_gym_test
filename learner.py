@@ -5,15 +5,14 @@ from copy import deepcopy
 from collections import deque
 
 import torch
-from torch.optim import Adam
+import torch.optim as optim
 
-from models import Policy, partial_load
-
+from models import Policy
 
 class Learner(object):
     def __init__(self, observation_size, num_actions, lr, c_hat, rho_hat, gamma,
                  value_loss_coef, entropy_coef, max_grad_norm, seed, max_batch_repeat,
-                 queue_batch, shared_state_dict, device):
+                 episode_steps, queue_batch, shared_state_dict, device):
         self.c_hat = c_hat
         self.rho_hat = rho_hat
         self.gamma = gamma
@@ -24,11 +23,10 @@ class Learner(object):
         self.device = device
         self.queue_batch = queue_batch
         self.shared_state_dict = shared_state_dict
-        self.max_batch_repeat =max_batch_repeat
-
-        self.policy = Policy(observation_size, num_actions,).to(self.device)
+        self.max_batch_repeat = max_batch_repeat
+        self.policy = Policy(observation_size, num_actions).to(self.device)
         self.policy.train()
-        self.optimizer = Adam(self.policy.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
         self.update_state_dict()
 
     def update_state_dict(self):

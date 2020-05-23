@@ -110,17 +110,15 @@ class MeleeEnv():
     num_actions = 30
     observation_size = 22
 
-    def __init__(self, act_every=2, episode_length=600, **dolphin_options):
+    def __init__(self, act_every=6, episode_length=600, **dolphin_options):
         super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
         self.act_every = act_every
-        self.episode_length = episode_length
         self.action_space = MeleeActionSpace(self.num_actions)
         self.observation_space = MeleeObservationSpace(self.observation_size)
         self._has_reset_once = False
         self._previous_dolphin_state = None
         self._dolphin_state = None
-        self._steps_complete = 0
 
     def reset(self):
         if not self._has_reset_once:
@@ -140,17 +138,15 @@ class MeleeEnv():
 
         observation = self._dolphin_state_to_numpy(self._dolphin_state)
         reward = self._compute_reward()
-        done = self._steps_complete % (self.episode_length - 1) == 0
+        done = False
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
-        self._steps_complete += 1
         return observation, reward, done, {}
 
     def _player_state_to_numpy(self, state):
         return np.array([
             #state.action_state,
-            #state.character,
             state.x / 100.0,
             state.y / 100.0,
             state.action_frame / 30.0,

@@ -22,11 +22,14 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='battlefield',
+    act_every=6,
 )
 
 num_actors = 2
 workers_per_actor = 4
 batch_size = 64
+episode_steps = 50
+seed = 2020
 load_model = None
 reset_policy = False
 
@@ -69,8 +72,9 @@ if __name__ == "__main__":
         value_loss_coef=0.5,
         entropy_coef=0.0025,
         max_grad_norm=0.5,
-        seed=2020,
+        seed=seed,
         max_batch_repeat=3,
+        episode_steps=episode_steps,
         queue_batch=experience_buffer.queue_batch,
         shared_state_dict=shared_state_dict,
         device=device,
@@ -80,7 +84,8 @@ if __name__ == "__main__":
     for rank in range(num_actors):
         actors.append(Actor(
             create_env_fn=create_vectorized_env,
-            episode_steps=300,
+            episode_steps=episode_steps,
+            seed=seed,
             rollout_queue=experience_buffer.queue_trace,
             shared_state_dict=shared_state_dict,
             device=device,

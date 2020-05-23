@@ -1,18 +1,19 @@
-import numpy as np
 import torch
 
-from models import Policy
+from models import Policy, partial_load
 
 class Actor(object):
-    def __init__(self, create_env_fn, episode_steps, rollout_queue, shared_state_dict, rank, device):
+    def __init__(self, create_env_fn, episode_steps, seed, rollout_queue, shared_state_dict, rank, device):
         self.create_env_fn = create_env_fn
         self.episode_steps = episode_steps
+        self.seed = seed
         self.rollout_queue = rollout_queue
         self.shared_state_dict = shared_state_dict
         self.device = device
         self.rank = rank
         self.env = None
         self.policy = None
+        self.opponent= None
         self.memory = None
 
     def initialize(self):
@@ -22,7 +23,11 @@ class Actor(object):
         self.memory = Memory()
 
     def performing(self):
+        torch.manual_seed(self.seed + self.rank)
+
         self.initialize()
+        observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+
         with torch.no_grad():
             while True:
                 try:
@@ -66,7 +71,7 @@ class Memory:
         self.observations.append(observation)
         self.actions.append(action)
         self.actions_log_probs.append(action_log_prob)
-        self.rewards.append(torch.from_numpy(reward.astype(np.float32)))
+        self.rewards.append(reward)
 
     def get_batch(self):
         observations = torch.cat(self.observations, dim=0).to('cpu')
@@ -78,4 +83,3 @@ class Memory:
 
     def __len__(self):
         return len(self.actions)
-
