@@ -88,8 +88,8 @@ class Learner(object):
 
             self.update_shared_state_dict()
 
-            if (i % self.save_interval == 0):
-                torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+            #if (i % self.save_interval == 0):
+            torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
 
             t_ = time.perf_counter()
             delta_t = t_ - t
@@ -102,7 +102,7 @@ class Learner(object):
                         pg_loss,
                         entropy_loss,
                         total_loss,
-                        actor_rewards.mean().item(),
+                        actor_rewards.mean().item() * 600.0,
                     )
                 )
             t = t_

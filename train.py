@@ -19,14 +19,14 @@ melee_options = dict(
     player2='human',
     char1='falcon',
     char2='falcon',
-    stage='battlefield',
-    act_every=6,
+    stage='final_destination',
+    act_every=15,
 )
 
 num_actors = 3
-workers_per_actor = 5
+workers_per_actor = 3
 batch_size = 64
-episode_steps = 600
+episode_steps = 20
 seed = 2020
 
 def create_vectorized_env(actor_rank):
@@ -34,8 +34,8 @@ def create_vectorized_env(actor_rank):
         global melee_options
         unique_id = worker_id + (actor_rank * workers_per_actor)
         modified_melee_options = deepcopy(melee_options)
-        if unique_id == 1:
-            modified_melee_options["render"] = True
+        #if unique_id == 1:
+        #    modified_melee_options["render"] = True
         return lambda : MeleeEnv(worker_id=unique_id, **modified_melee_options)
     return VectorizedEnv([get_melee_env_fn(worker_id) for worker_id in range(workers_per_actor)])
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         lr=3e-5,
         discounting=0.99,
         baseline_cost=0.5,
-        entropy_cost=0.0006,
+        entropy_cost=0.0025,
         grad_norm_clipping=40.0,
         save_interval=2,
         seed=seed,
