@@ -6,7 +6,7 @@ import torch.multiprocessing as mp
 from melee_env import MeleeEnv
 from vectorized_env import VectorizedEnv
 from learner import Learner
-from models import Policy
+from models import Policy, partial_load
 from actor import Actor
 from experience_buffer import ExperienceBuffer
 
@@ -20,14 +20,23 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=15,
+    act_every=1,
 )
 
 num_actors = 3
-workers_per_actor = 3
-batch_size = 64
+workers_per_actor = 4
+batch_size = 128
 episode_steps = 20
 seed = 2020
+load_model = "checkpoints/agent.pth"
+reset_policy = False
+
+def partial_load_model_to_state_dict(state_dict):
+    if load_model is not None:
+        partial_load(state_dict, load_model)
+        if reset_policy:
+            state_dict.policy.weight.data.zero_()
+            state_dict.policy.bias.data.zero_()
 
 def create_vectorized_env(actor_rank):
     def get_melee_env_fn(worker_id):
@@ -48,6 +57,7 @@ if __name__ == "__main__":
     processes.append(p)
 
     shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
+    partial_load_model_to_state_dict(shared_state_dict)
     shared_state_dict.share_memory()
 
     learner = Learner(
@@ -65,6 +75,7 @@ if __name__ == "__main__":
         shared_state_dict=shared_state_dict,
         device=device,
     )
+    partial_load_model_to_state_dict(learner.policy)
 
     actors = []
     for rank in range(num_actors):

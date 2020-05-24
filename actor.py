@@ -17,15 +17,12 @@ class Actor(object):
         self.opponent= None
         self.memory = None
         self.rnn_state = None
-        #self.previous_action = None
-        #self.previous_reward = None
 
     def initialize(self):
         if self.env is None:
             self.env = self.create_env_fn(self.rank)
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
         self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
-        #self.rnn_state = torch.zeros(1, self.num_workers, 1, dtype=torch.float32, device=self.device)
         self.memory = Memory()
 
     def performing(self):
@@ -45,17 +42,21 @@ class Actor(object):
                     for _ in range(self.episode_steps):
                         logits, baseline, action, self.rnn_state = self.policy(observation, self.rnn_state)
 
+                        self.memory.observations.append(observation)
+                        self.memory.actions.append(action)
+                        self.memory.logits.append(logits)
+                        self.memory.baselines.append(baseline)
+
                         observation, reward, done, _ = self.env.step(action[-1].cpu().numpy())
                         done = torch.tensor([done], dtype=torch.bool, device=self.device)
                         observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
                         reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
 
-                        self.memory.observations.append(observation)
-                        self.memory.actions.append(action)
                         self.memory.rewards.append(reward)
                         self.memory.dones.append(done)
-                        self.memory.logits.append(logits)
-                        self.memory.baselines.append(baseline)
+
+                        self.previous_action = action
+                        self.previous_reward = reward
 
                     self.rollout_queue.put(self.memory.get_batch())
 

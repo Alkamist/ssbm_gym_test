@@ -30,5 +30,5 @@ if __name__ == "__main__":
         observation, reward, done, _ = env.step(action)
         observation = torch.tensor([[observation]], dtype=torch.float32)
 
-        #if reward != 0.0:
-        #    print("Reward: %.4f" % reward)
+        if reward != 0.0:
+            print("Reward: %.4f" % reward)
