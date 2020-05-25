@@ -16,7 +16,7 @@ melee_options = dict(
     render=False,
     speed=0,
     player1='ai',
-    player2='human',
+    player2='cpu',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
@@ -24,12 +24,12 @@ melee_options = dict(
 )
 
 num_actors = 3
-workers_per_actor = 4
+workers_per_actor = 5
 batch_size = 128
-episode_steps = 300
+episode_steps = 600
 seed = 2020
-#load_model = "checkpoints/agent.pth"
-load_model = None
+load_model = "checkpoints/agent.pth"
+#load_model = None
 reset_policy = False
 
 def partial_load_model_to_state_dict(state_dict):

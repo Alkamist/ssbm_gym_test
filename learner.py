@@ -89,7 +89,8 @@ class Learner(object):
             self.update_shared_state_dict()
 
             #if (i % self.save_interval == 0):
-            torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+            #torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+            torch.save(self.shared_state_dict.state_dict(), "checkpoints/model" + str(i) + ".pth")
 
             t_ = time.perf_counter()
             delta_t = t_ - t

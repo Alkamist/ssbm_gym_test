@@ -18,11 +18,14 @@ class Actor(object):
         self.memory = None
         self.rnn_state = None
 
+    def reset_rnn(self):
+        self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
+
     def initialize(self):
         if self.env is None:
             self.env = self.create_env_fn(self.rank)
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
-        self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
+        self.reset_rnn()
         self.memory = Memory()
 
     def performing(self):
@@ -34,10 +37,11 @@ class Actor(object):
         with torch.no_grad():
             while True:
                 try:
+                    skip_batch = False
+
                     self.policy.load_state_dict(self.shared_state_dict.state_dict())
 
                     self.memory.rnn_states.append(self.rnn_state)
-                    observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
 
                     for _ in range(self.episode_steps):
                         logits, baseline, action, self.rnn_state = self.policy(observation, self.rnn_state)
@@ -47,7 +51,16 @@ class Actor(object):
                         self.memory.logits.append(logits)
                         self.memory.baselines.append(baseline)
 
-                        observation, reward, done, _ = self.env.step(action[-1].cpu().numpy())
+                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action[-1].cpu().numpy()))
+
+                        try:
+                            observation, reward, done, _ = step_env_with_timeout()
+                        except:
+                            skip_batch = True
+                            observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+                            self.reset_rnn()
+                            break
+
                         done = torch.tensor([done], dtype=torch.bool, device=self.device)
                         observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
                         reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
@@ -58,7 +71,8 @@ class Actor(object):
                         self.previous_action = action
                         self.previous_reward = reward
 
-                    self.rollout_queue.put(self.memory.get_batch())
+                    if not skip_batch:
+                        self.rollout_queue.put(self.memory.get_batch())
 
                 except KeyboardInterrupt:
                     self.env.close()
@@ -89,3 +103,31 @@ class Memory:
 
     def __len__(self):
         return len(self.actions)
+
+from threading import Thread
+import functools
+
+def timeout(seconds_before_timeout):
+    def deco(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            res = [Exception('function [%s] timeout [%s seconds] exceeded!' % (func.__name__, seconds_before_timeout))]
+            def newFunc():
+                try:
+                    res[0] = func(*args, **kwargs)
+                except Exception as e:
+                    res[0] = e
+            t = Thread(target=newFunc)
+            t.daemon = True
+            try:
+                t.start()
+                t.join(seconds_before_timeout)
+            except Exception as e:
+                print('error starting thread')
+                raise e
+            ret = res[0]
+            if isinstance(ret, BaseException):
+                raise ret
+            return ret
+        return wrapper
+    return deco

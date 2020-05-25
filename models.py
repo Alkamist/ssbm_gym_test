@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class Policy(nn.Module):
-    def __init__(self, observation_size, action_size, hidden_size=256, rnn_hidden_size=512, rnn_layers=1):
+    def __init__(self, observation_size, action_size, hidden_size=256, rnn_hidden_size=512, rnn_layers=2):
         super().__init__()
         self.observation_size = observation_size
         self.action_size = action_size
