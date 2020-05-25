@@ -123,14 +123,10 @@ class MeleeEnv():
         self.seed = seed
         self.action_space = MeleeActionSpace(self.num_actions, seed)
         self.observation_space = MeleeObservationSpace(self.observation_size)
-        self._needs_real_reset = True
-        self._step_count_since_reset = 0
         self._previous_dolphin_state = None
         self._dolphin_state = None
 
     def reset(self):
-        #if self._needs_real_reset:
-        #    self._needs_real_reset = False
         self._previous_dolphin_state = None
         self._dolphin_state = self.dolphin.reset()
         return self._dolphin_state_to_numpy(self._dolphin_state)
@@ -141,20 +137,14 @@ class MeleeEnv():
     def step(self, action):
         for _ in range(self.act_every - 1):
             self.dolphin.step([_controller_states[action]])
-            self._step_count_since_reset += 1
 
         self._dolphin_state = self.dolphin.step([_controller_states[action]])
-        self._step_count_since_reset += 1
 
         observation = self._dolphin_state_to_numpy(self._dolphin_state)
         reward = self._compute_reward()
         done = False
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
-
-        #if self._step_count_since_reset > 38400:
-        #    self._step_count_since_reset = 0
-        #    self._needs_real_reset = True
 
         return observation, reward, done, {}
 
