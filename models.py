@@ -36,6 +36,7 @@ class Policy(nn.Module):
 
         if self.training:
             action = torch.multinomial(F.softmax(policy_logits, dim=1), num_samples=1)
+            action = action.clamp(0, self.action_size - 1)
         else:
             # Don't sample when testing.
             action = torch.argmax(policy_logits, dim=1)

@@ -36,30 +36,24 @@ class Actor(object):
 
         with torch.no_grad():
             while True:
-                try:
-                    skip_batch = False
+                skip_batch = False
 
-                    self.policy.load_state_dict(self.shared_state_dict.state_dict())
+                self.policy.load_state_dict(self.shared_state_dict.state_dict())
 
-                    self.memory.rnn_states.append(self.rnn_state)
+                self.memory.rnn_states.append(self.rnn_state)
 
-                    for _ in range(self.episode_steps):
-                        logits, baseline, action, self.rnn_state = self.policy(observation, self.rnn_state)
+                for _ in range(self.episode_steps):
+                    logits, baseline, action, self.rnn_state = self.policy(observation, self.rnn_state)
 
-                        self.memory.observations.append(observation)
-                        self.memory.actions.append(action)
-                        self.memory.logits.append(logits)
-                        self.memory.baselines.append(baseline)
+                    self.memory.observations.append(observation)
+                    self.memory.actions.append(action)
+                    self.memory.logits.append(logits)
+                    self.memory.baselines.append(baseline)
 
-                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action[-1].cpu().numpy()))
+                    step_env_with_timeout = timeout(5)(lambda : self.env.step(action[-1].cpu().numpy()))
 
-                        try:
-                            observation, reward, done, _ = step_env_with_timeout()
-                        except:
-                            skip_batch = True
-                            observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
-                            self.reset_rnn()
-                            break
+                    try:
+                        observation, reward, done, _ = step_env_with_timeout()
 
                         done = torch.tensor([done], dtype=torch.bool, device=self.device)
                         observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
@@ -71,11 +65,16 @@ class Actor(object):
                         self.previous_action = action
                         self.previous_reward = reward
 
-                    if not skip_batch:
-                        self.rollout_queue.put(self.memory.get_batch())
+                    except:
+                        skip_batch = True
+                        observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+                        self.reset_rnn()
+                        break
 
-                except KeyboardInterrupt:
-                    self.env.close()
+                if skip_batch:
+                    self.memory.clear_memory()
+                else:
+                    self.rollout_queue.put(self.memory.get_batch())
 
 class Memory:
     def __init__(self):
