@@ -59,7 +59,7 @@ L_stick = [
 
 _controller = []
 for button, stick in enumerate([NONE_stick, A_stick, B_stick, Z_stick, Y_stick, L_stick]):
-    _controller += [SimpleController(*args) for args in product([SimpleButton(button)], stick)]
+    _controller += [SimpleController.init(*args) for args in product([SimpleButton(button)], stick)]
 _controller_states = [a.real_controller for a in _controller]
 
 class MeleeObservationSpace():
