@@ -1,6 +1,7 @@
 import torch
 import torch.multiprocessing as mp
 
+from models import Policy
 
 class Rollout(object):
     def __init__(self, rollout_steps):
@@ -9,57 +10,74 @@ class Rollout(object):
         self.actions = []
         self.rewards = []
         self.dones = []
+        self.logits = []
+        self.baselines = []
 
     def __len__(self):
         return self.rollout_steps
 
-
 class Actor(object):
-    def __init__(self, create_env_func, actor_id, rollout_steps, rollout_queue, seed, device):
+    def __init__(self, create_env_func, actor_id, rollout_steps, rollout_queue, shared_state_dict, seed, device):
         self.create_env_func = create_env_func
         self.actor_id = actor_id
         self.rollout_steps = rollout_steps
         self.rollout_queue = rollout_queue
+        self.shared_state_dict = shared_state_dict
         self.seed = seed
         self.device = device
+        self.policy = None
         self.env = None
 
     def run(self):
+        torch.manual_seed(self.seed + self.actor_id)
+
         if self.env is None:
             self.env = self.create_env_func(self.actor_id)
 
-        state = self.env.reset()
+        self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(device=self.device)
+
+        state = torch.tensor([[self.env.reset()]], dtype=torch.float32, device=self.device)
 
         with torch.no_grad():
             while True:
-                try:
-                    rollout = Rollout(self.rollout_steps)
+                #try:
+                self.policy.load_state_dict(self.shared_state_dict.state_dict())
 
-                    for _ in range(self.rollout_steps):
-                        action = self.env.action_space.sample()
+                rollout = Rollout(self.rollout_steps)
 
-                        rollout.states.append(state)
-                        rollout.actions.append(action)
+                for _ in range(self.rollout_steps):
+                    logits, baseline, action = self.policy(state)
 
-                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action))
-                        state, reward, done, _ = step_env_with_timeout()
+                    rollout.states.append(1)
+                    #rollout.states.append(state.squeeze())
 
-                        rollout.rewards.append(reward)
-                        rollout.dones.append(done)
+                    step_env_with_timeout = timeout(5)(lambda : self.env.step(action.squeeze().cpu()))
+                    state, reward, done, _ = step_env_with_timeout()
 
-                    self.rollout_queue.put(rollout)
+                    state = torch.tensor([[state]], dtype=torch.float32, device=self.device)
+                    #reward = reward
+                    #done = done
 
-                except KeyboardInterrupt:
-                    self.env.close()
-                except:
-                    self.rollout_queue.put(self.actor_id)
+                    #rollout.actions.append(action)
+                    #rollout.rewards.append(reward)
+                    #rollout.dones.append(reward)
+                    #rollout.logits.append(logits.squeeze())
+                    #rollout.baselines.append(baseline.squeeze())
+
+                self.rollout_queue.put(rollout)
+
+                #except KeyboardInterrupt:
+                #    self.env.close()
+                #except:
+                #    self.rollout_queue.put(self.actor_id)
 
 class RolloutGenerator(object):
-    def __init__(self, create_env_func, num_actors, rollout_steps, seed, device):
+    def __init__(self, create_env_func, num_actors, rollout_steps, shared_state_dict, seed, device):
         self.create_env_func = create_env_func
         self.is_initialized = False
         self.num_actors = num_actors
         self.rollout_steps = rollout_steps
+        self.shared_state_dict = shared_state_dict
         self.seed = seed
         self.device = device
 
@@ -78,6 +96,7 @@ class RolloutGenerator(object):
             actor_id = actor_id,
             rollout_steps = self.rollout_steps,
             rollout_queue = self.rollout_queue,
+            shared_state_dict = self.shared_state_dict,
             seed = self.seed,
             device = self.device
         )
