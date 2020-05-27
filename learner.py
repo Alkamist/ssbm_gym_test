@@ -1,5 +1,4 @@
 import time
-import queue
 
 import torch
 from torch import nn
@@ -10,8 +9,8 @@ from models import Policy
 
 class Learner(object):
     def __init__(self, observation_size, num_actions, lr, discounting, baseline_cost,
-                 entropy_cost, grad_norm_clipping, save_interval, seed, episode_steps,
-                 shared_state_dict, device):
+                 entropy_cost, grad_norm_clipping, save_interval, seed, shared_state_dict,
+                 device):
         self.discounting = discounting
         self.baseline_cost = baseline_cost
         self.entropy_cost = entropy_cost
@@ -30,17 +29,13 @@ class Learner(object):
         self.shared_state_dict.load_state_dict(self.policy.state_dict())
 
     def learn(self, batch):
-        actor_observations, actor_actions, actor_rewards, actor_dones, actor_logits, actor_baselines, actor_rnn_states = self.queue_batch.get(block=True)
+        actor_states = batch.states.to(self.device)
+        actor_actions = batch.actions.to(self.device)
+        actor_rewards = batch.rewards.to(self.device)
+        actor_dones = batch.dones.to(self.device)
+        actor_logits = batch.logits.to(self.device)
 
-        actor_observations = actor_observations.to(self.device)
-        actor_actions = actor_actions.to(self.device)
-        actor_rewards = actor_rewards.to(self.device)
-        actor_dones = actor_dones.to(self.device)
-        actor_logits = actor_logits.to(self.device)
-        actor_baselines = actor_baselines.to(self.device)
-        actor_rnn_states = actor_rnn_states.to(self.device)
-
-        learner_logits, learner_baselines, _, _ = self.policy(actor_observations, actor_rnn_states)
+        learner_logits, learner_baselines, _ = self.policy(actor_states)
 
         # Take final value function slice for bootstrapping.
         bootstrap_value = learner_baselines[-1]
@@ -83,7 +78,7 @@ class Learner(object):
 
         t_ = time.perf_counter()
         delta_t = t_ - t
-        steps = (actor_observations.shape[0] - 1) * actor_observations.shape[1]
+        steps = (actor_states.shape[0] - 1) * actor_states.shape[1]
         if delta_t > 0.0:
             print("FPS {:.1f} / Total steps {} / Baseline loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
                     steps / (t_ - t),

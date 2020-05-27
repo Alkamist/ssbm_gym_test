@@ -34,6 +34,8 @@ class Policy(nn.Module):
         return policy_logits, baseline, action
 
 
+# Don't forget to switch batch and time size positions.
+
 #class Policy(nn.Module):
 #    def __init__(self, observation_size, action_size, hidden_size=256, rnn_hidden_size=512, rnn_layers=2):
 #        super().__init__()

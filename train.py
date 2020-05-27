@@ -3,6 +3,8 @@ import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from rollout_generator import RolloutGenerator
+from learner import Learner
+from models import Policy
 
 
 melee_options = dict(
@@ -17,7 +19,7 @@ melee_options = dict(
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_actors = 8
+num_actors = 2
 rollout_steps = 600
 seed = 1
 
@@ -27,6 +29,9 @@ def get_melee_env_func(actor_id):
 
 
 if __name__ == "__main__":
+    shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
+    shared_state_dict.share_memory()
+
     rollout_queue = mp.Queue()
 
     rollout_generator = RolloutGenerator(
@@ -34,8 +39,23 @@ if __name__ == "__main__":
         num_actors = num_actors,
         rollout_steps = rollout_steps,
         rollout_queue = rollout_queue,
+        shared_state_dict = shared_state_dict,
         seed = seed,
         device = device
+    )
+
+    learner = Learner(
+        observation_size=MeleeEnv.observation_size,
+        num_actions=MeleeEnv.num_actions,
+        lr=3e-5,
+        discounting=0.99,
+        baseline_cost=0.5,
+        entropy_cost=0.0025,
+        grad_norm_clipping=40.0,
+        save_interval=2,
+        seed=seed,
+        shared_state_dict=shared_state_dict,
+        device=device,
     )
 
     process = mp.Process(target=rollout_generator.run)
@@ -46,6 +66,8 @@ if __name__ == "__main__":
         rollout = rollout_queue.get()
 
         total_steps += len(rollout) * num_actors
-        print(total_steps)
+        #print(total_steps)
+
+        print(rollout.rewards)
 
     process.join()
