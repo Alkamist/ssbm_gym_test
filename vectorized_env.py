@@ -20,14 +20,12 @@ def _worker(remote, parent_remote, env_fn_wrapper):
             cmd, data = remote.recv()
             if cmd == 'step':
                 observation, reward, done, info = env.step(data)
-                # if done:
-                #     # save final observation where user can get it, then reset
-                #     # info['terminal_observation'] = observation
                 remote.send((observation, reward, done, info))
             elif cmd == 'reset':
                 observation = env.reset()
                 remote.send(observation)
             elif cmd == 'close':
+                env.close()
                 remote.close()
                 break
             elif cmd == 'get_spaces':
@@ -96,13 +94,13 @@ class VectorizedEnv():
     def close(self):
         if self.closed:
             return
-        if self.waiting:
-            for remote in self.remotes:
-                remote.recv()
+#        if self.waiting:
+#            for remote in self.remotes:
+#                remote.recv()
         for remote in self.remotes:
             remote.send(('close', None))
-        for process in self.processes:
-            process.join()
+#        for process in self.processes:
+#            process.join()
         self.closed = True
 
     def get_attr(self, attr_name, indices=None):

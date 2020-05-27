@@ -1,9 +1,9 @@
-import numpy as np
 import torch
+import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from rollout_generator import RolloutGenerator
-from models import Policy
+
 
 melee_options = dict(
     render=False,
@@ -17,47 +17,35 @@ melee_options = dict(
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_actors = 12
-batch_size = 64
+num_actors = 8
 rollout_steps = 600
 seed = 1
 
 
-def create_melee_env(actor_id):
-    return MeleeEnv(worker_id=actor_id, **melee_options)
+def get_melee_env_func(actor_id):
+    return lambda : MeleeEnv(worker_id=actor_id, **melee_options)
 
 
 if __name__ == "__main__":
-    shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
-    shared_state_dict.share_memory()
+    rollout_queue = mp.Queue()
 
-    melee_rollout_generator = RolloutGenerator(
-        create_env_func = create_melee_env,
+    rollout_generator = RolloutGenerator(
+        env_func = get_melee_env_func,
         num_actors = num_actors,
         rollout_steps = rollout_steps,
-        shared_state_dict = shared_state_dict,
+        rollout_queue = rollout_queue,
         seed = seed,
         device = device
     )
 
-    #state_batch = []
-    #action_batch = []
-    #reward_batch = []
-    #done_batch = []
+    process = mp.Process(target=rollout_generator.run)
+    process.start()
 
-    total_frames = 0
+    total_steps = 0
     while True:
-        rollout = melee_rollout_generator.generate_rollout()
+        rollout = rollout_queue.get()
 
-        #state_batch.append(rollout.states)
-        #action_batch.append(rollout.actions)
-        #reward_batch.append(rollout.rewards)
-        #done_batch.append(rollout.dones)
+        total_steps += len(rollout) * num_actors
+        print(total_steps)
 
-        #if len(state_batch) >= batch_size:
-        #    print("Learned")
-
-        total_frames += len(rollout)
-        print("Total Frames: %i" % total_frames)
-
-    melee_rollout_generator.join_actor_processes()
+    process.join()
