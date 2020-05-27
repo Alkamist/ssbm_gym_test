@@ -23,17 +23,19 @@ class Learner(object):
         self.policy.train()
         self.optimizer = optim.RMSprop(self.policy.parameters(), lr=lr)
         self.update_shared_state_dict()
+        self.time_of_last_print = time.perf_counter()
+        self.total_steps = 0
         torch.manual_seed(self.seed)
 
     def update_shared_state_dict(self):
         self.shared_state_dict.load_state_dict(self.policy.state_dict())
 
-    def learn(self, batch):
-        actor_states = batch.states.to(self.device)
-        actor_actions = batch.actions.to(self.device)
-        actor_rewards = batch.rewards.to(self.device)
-        actor_dones = batch.dones.to(self.device)
-        actor_logits = batch.logits.to(self.device)
+    def learn(self, actor_states, actor_actions, actor_rewards, actor_dones, actor_logits):
+        actor_states = actor_states.to(self.device)
+        actor_actions = actor_actions.to(self.device)
+        actor_rewards = actor_rewards.to(self.device)
+        actor_dones = actor_dones.to(self.device)
+        actor_logits = actor_logits.to(self.device)
 
         learner_logits, learner_baselines, _ = self.policy(actor_states)
 
@@ -74,15 +76,16 @@ class Learner(object):
         self.update_shared_state_dict()
 
         #if (i % self.save_interval == 0):
-        torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+        #torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
 
         t_ = time.perf_counter()
-        delta_t = t_ - t
+        delta_t = t_ - self.time_of_last_print
         steps = (actor_states.shape[0] - 1) * actor_states.shape[1]
+        self.total_steps += steps
         if delta_t > 0.0:
             print("FPS {:.1f} / Total steps {} / Baseline loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
-                    steps / (t_ - t),
-                    steps * i,
+                    steps / (t_ - self.time_of_last_print),
+                    self.total_steps,
                     baseline_loss,
                     pg_loss,
                     entropy_loss,
@@ -90,9 +93,9 @@ class Learner(object):
                     actor_rewards.mean().item() * 600.0,
                 )
             )
-        t = t_
+        self.time_of_last_print = t_
 
-        time.sleep(0.1)
+        #time.sleep(0.1)
 
 
 def compute_baseline_loss(advantages):
