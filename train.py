@@ -1,52 +1,65 @@
+from copy import deepcopy
+
 import torch
 import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
-from rollout_generator import RolloutGenerator
-from experience_buffer import ExperienceBuffer
+from vectorized_env import VectorizedEnv
 from learner import Learner
-from models import Policy
+from models import Policy, partial_load
+from actor import Actor
+from experience_buffer import ExperienceBuffer
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 melee_options = dict(
     render=False,
     speed=0,
     player1='ai',
-    player2='cpu',
+    player2='human',
     char1='falcon',
     char2='falcon',
-    stage='final_destination',
+    stage='battlefield',
     act_every=1,
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_actors = 2
-batch_size = 64
-rollout_steps = 600
+workers_per_actor = 8
+batch_size = 128
+episode_steps = 600
 seed = 1
+#load_model = "checkpoints/agent.pth"
+load_model = None
+reset_policy = False
 
+def partial_load_model_to_state_dict(state_dict):
+    if load_model is not None:
+        partial_load(state_dict, load_model)
+        if reset_policy:
+            state_dict.policy.weight.data.zero_()
+            state_dict.policy.bias.data.zero_()
 
-def get_melee_env_func(actor_id):
-    return lambda : MeleeEnv(worker_id=actor_id, **melee_options)
-
+def create_vectorized_env(actor_rank):
+    def get_melee_env_fn(worker_id):
+        global melee_options
+        unique_id = worker_id + (actor_rank * workers_per_actor)
+        modified_melee_options = deepcopy(melee_options)
+        if unique_id == 1:
+            modified_melee_options["render"] = True
+        return lambda : MeleeEnv(worker_id=unique_id, **modified_melee_options)
+    return VectorizedEnv([get_melee_env_fn(worker_id) for worker_id in range(workers_per_actor)])
 
 if __name__ == "__main__":
-    experience_buffer = ExperienceBuffer(batch_size=batch_size)
+    processes = []
+
+    experience_buffer = ExperienceBuffer(batch_size)
+    p = mp.Process(target=experience_buffer.listening)
+    p.start()
+    processes.append(p)
 
     shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
+    partial_load_model_to_state_dict(shared_state_dict)
     shared_state_dict.share_memory()
-
-    rollout_queue = mp.Queue()
-
-    rollout_generator = RolloutGenerator(
-        env_func = get_melee_env_func,
-        num_actors = num_actors,
-        rollout_steps = rollout_steps,
-        rollout_queue = rollout_queue,
-        shared_state_dict = shared_state_dict,
-        seed = seed,
-        device = device
-    )
 
     learner = Learner(
         observation_size=MeleeEnv.observation_size,
@@ -58,25 +71,31 @@ if __name__ == "__main__":
         grad_norm_clipping=40.0,
         save_interval=2,
         seed=seed,
+        queue_batch=experience_buffer.queue_batch,
         shared_state_dict=shared_state_dict,
         device=device,
     )
+    partial_load_model_to_state_dict(learner.policy)
 
-    process = mp.Process(target=rollout_generator.run)
-    process.start()
+    actors = []
+    for rank in range(num_actors):
+        actors.append(Actor(
+            create_env_fn=create_vectorized_env,
+            episode_steps=episode_steps,
+            num_workers=workers_per_actor,
+            seed=seed,
+            rollout_queue=experience_buffer.queue_trace,
+            shared_state_dict=shared_state_dict,
+            device=device,
+            rank=rank,
+        ))
 
-    total_steps = 0
-    num_traces = 0
-    while True:
-        rollout = rollout_queue.get()
+    for actor in actors:
+        p = mp.Process(target=actor.performing)
+        p.start()
+        processes.append(p)
 
-        total_steps += len(rollout) * num_actors
-        #print(total_steps)
+    learner.learning()
 
-        experience_buffer.add(rollout.states, rollout.actions, rollout.rewards, rollout.dones, rollout.logits)
-
-        if experience_buffer.batch_is_ready:
-            states_batch, actions_batch, rewards_batch, dones_batch, logits_batch = experience_buffer.get_batch()
-            learner.learn(states_batch, actions_batch, rewards_batch, dones_batch, logits_batch)
-
-    process.join()
+    for p in processes:
+        p.join()

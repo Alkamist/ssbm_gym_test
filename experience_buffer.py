@@ -1,60 +1,55 @@
 import torch
+from torch.multiprocessing import Queue
 
 class ExperienceBuffer():
     def __init__(self, batch_size):
-        self.states = []
+        self.observations = []
         self.actions = []
         self.rewards = []
         self.dones = []
         self.logits = []
+        self.rnn_states = []
+
+        self.queue_trace = Queue(maxsize=30)
+        self.queue_batch = Queue(maxsize=3)
         self.batch_size = batch_size
         self.num_traces = 0
-        self.batch_is_ready = False
-        self.states_batch = None
-        self.actions_batch = None
-        self.rewards_batch = None
-        self.dones_batch = None
-        self.logits_batch = None
 
-    def add(self, states, actions, rewards, dones, logits):
-        self.states.append(states)
-        self.actions.append(actions)
-        self.rewards.append(rewards)
-        self.dones.append(dones)
-        self.logits.append(logits)
+    def listening(self):
+        while True:
+            trace = self.queue_trace.get(block=True)
 
-        self.num_traces += len(states)
+            self.observations.append(trace[0])
+            self.actions.append(trace[1])
+            self.rewards.append(trace[2])
+            self.dones.append(trace[3])
+            self.logits.append(trace[4])
+            self.rnn_states.append(trace[5])
 
-        if self.num_traces >= self.batch_size:
-            self.num_traces -= self.batch_size
+            self.num_traces += trace[0].shape[1]
 
-            self.states_batch, states_remain = torch.cat(self.states).split([self.batch_size, self.num_traces])
-            self.actions_batch, actions_remain = torch.cat(self.actions).split([self.batch_size, self.num_traces])
-            self.rewards_batch, rewards_remain = torch.cat(self.rewards).split([self.batch_size, self.num_traces])
-            self.dones_batch, dones_remain = torch.cat(self.dones).split([self.batch_size, self.num_traces])
-            self.logits_batch, logits_remain = torch.cat(self.logits).split([self.batch_size, self.num_traces])
+            if self.num_traces >= self.batch_size:
+                self.num_traces -= self.batch_size
 
-            self.states = [states_remain]
-            self.actions = [actions_remain]
-            self.rewards = [rewards_remain]
-            self.dones = [dones_remain]
-            self.logits = [logits_remain]
+                observations_batch, observations_remain = torch.cat(self.observations, dim=1).split([self.batch_size, self.num_traces], dim=1)
+                actions_batch, actions_remain = torch.cat(self.actions, dim=1).split([self.batch_size, self.num_traces], dim=1)
+                rewards_batch, rewards_remain = torch.cat(self.rewards, dim=1).split([self.batch_size, self.num_traces], dim=1)
+                dones_batch, dones_remain = torch.cat(self.dones, dim=1).split([self.batch_size, self.num_traces], dim=1)
+                logits_batch, logits_remain = torch.cat(self.logits, dim=1).split([self.batch_size, self.num_traces], dim=1)
+                rnn_states_batch, rnn_states_remain = torch.cat(self.rnn_states, dim=1).split([self.batch_size, self.num_traces], dim=1)
 
-            self.batch_is_ready = True
+                self.observations = [observations_remain]
+                self.actions = [actions_remain]
+                self.rewards = [rewards_remain]
+                self.dones = [dones_remain]
+                self.logits = [logits_remain]
+                self.rnn_states = [rnn_states_remain]
 
-    def get_batch(self):
-        states_batch = self.states_batch
-        actions_batch = self.actions_batch
-        rewards_batch = self.rewards_batch
-        dones_batch = self.dones_batch
-        logits_batch = self.logits_batch
-
-        self.states_batch = None
-        self.actions_batch = None
-        self.rewards_batch = None
-        self.dones_batch = None
-        self.logits_batch = None
-
-        self.batch_is_ready = False
-
-        return states_batch, actions_batch, rewards_batch, dones_batch, logits_batch
+                self.queue_batch.put((
+                    observations_batch,
+                    actions_batch,
+                    rewards_batch,
+                    dones_batch,
+                    logits_batch,
+                    rnn_states_batch
+                ))

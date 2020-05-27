@@ -1,4 +1,5 @@
 import time
+import queue
 
 import torch
 from torch import nn
@@ -9,8 +10,8 @@ from models import Policy
 
 class Learner(object):
     def __init__(self, observation_size, num_actions, lr, discounting, baseline_cost,
-                 entropy_cost, grad_norm_clipping, save_interval, seed, shared_state_dict,
-                 device):
+                 entropy_cost, grad_norm_clipping, save_interval, seed, queue_batch,
+                 shared_state_dict, device):
         self.discounting = discounting
         self.baseline_cost = baseline_cost
         self.entropy_cost = entropy_cost
@@ -18,84 +19,95 @@ class Learner(object):
         self.seed = seed
         self.save_interval = save_interval
         self.device = device
+        self.queue_batch = queue_batch
         self.shared_state_dict = shared_state_dict
         self.policy = Policy(observation_size, num_actions).to(self.device)
         self.policy.train()
         self.optimizer = optim.RMSprop(self.policy.parameters(), lr=lr)
         self.update_shared_state_dict()
-        self.time_of_last_print = time.perf_counter()
-        self.total_steps = 0
-        torch.manual_seed(self.seed)
 
     def update_shared_state_dict(self):
         self.shared_state_dict.load_state_dict(self.policy.state_dict())
 
-    def learn(self, actor_states, actor_actions, actor_rewards, actor_dones, actor_logits):
-        actor_states = actor_states.to(self.device)
-        actor_actions = actor_actions.to(self.device)
-        actor_rewards = actor_rewards.to(self.device)
-        actor_dones = actor_dones.to(self.device)
-        actor_logits = actor_logits.to(self.device)
+    def learning(self):
+        torch.manual_seed(self.seed)
 
-        learner_logits, learner_baselines, _ = self.policy(actor_states)
+        i = 0
+        t = time.perf_counter()
+        while True:
+            i += 1
 
-        # Take final value function slice for bootstrapping.
-        bootstrap_value = learner_baselines[-1]
+            try:
+                actor_observations, actor_actions, actor_rewards, actor_dones, actor_logits, actor_rnn_states = self.queue_batch.get(block=True)
+            except queue.Empty:
+                pass
 
-        discounts = (~actor_dones).float() * self.discounting
+            actor_observations = actor_observations.to(self.device)
+            actor_actions = actor_actions.to(self.device)
+            actor_rewards = actor_rewards.to(self.device)
+            actor_dones = actor_dones.to(self.device)
+            actor_logits = actor_logits.to(self.device)
+            actor_rnn_states = actor_rnn_states.to(self.device)
 
-        vtrace_returns = vtrace_from_logits(
-            behavior_policy_logits=actor_logits,
-            target_policy_logits=learner_logits,
-            actions=actor_actions,
-            discounts=discounts,
-            rewards=actor_rewards,
-            values=learner_baselines,
-            bootstrap_value=bootstrap_value,
-        )
+            learner_logits, learner_baselines, _, _ = self.policy(actor_observations, actor_rnn_states)
 
-        pg_loss = compute_policy_gradient_loss(
-            learner_logits,
-            actor_actions,
-            vtrace_returns.pg_advantages,
-        )
-        baseline_loss = self.baseline_cost * compute_baseline_loss(
-            vtrace_returns.vs - learner_baselines
-        )
-        entropy_loss = self.entropy_cost * compute_entropy_loss(
-            learner_logits
-        )
+            # Take final value function slice for bootstrapping.
+            bootstrap_value = learner_baselines[-1]
 
-        total_loss = pg_loss + baseline_loss + entropy_loss
+            discounts = (~actor_dones).float() * self.discounting
 
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_norm_clipping)
-        self.optimizer.step()
-
-        self.update_shared_state_dict()
-
-        #if (i % self.save_interval == 0):
-        #torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
-
-        t_ = time.perf_counter()
-        delta_t = t_ - self.time_of_last_print
-        steps = (actor_states.shape[0] - 1) * actor_states.shape[1]
-        self.total_steps += steps
-        if delta_t > 0.0:
-            print("FPS {:.1f} / Total steps {} / Baseline loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
-                    steps / (t_ - self.time_of_last_print),
-                    self.total_steps,
-                    baseline_loss,
-                    pg_loss,
-                    entropy_loss,
-                    total_loss,
-                    actor_rewards.mean().item() * 600.0,
-                )
+            vtrace_returns = vtrace_from_logits(
+                behavior_policy_logits=actor_logits,
+                target_policy_logits=learner_logits,
+                actions=actor_actions,
+                discounts=discounts,
+                rewards=actor_rewards,
+                values=learner_baselines,
+                bootstrap_value=bootstrap_value,
             )
-        self.time_of_last_print = t_
 
-        #time.sleep(0.1)
+            pg_loss = compute_policy_gradient_loss(
+                learner_logits,
+                actor_actions,
+                vtrace_returns.pg_advantages,
+            )
+            baseline_loss = self.baseline_cost * compute_baseline_loss(
+                vtrace_returns.vs - learner_baselines
+            )
+            entropy_loss = self.entropy_cost * compute_entropy_loss(
+                learner_logits
+            )
+
+            total_loss = pg_loss + baseline_loss + entropy_loss
+
+            self.optimizer.zero_grad()
+            total_loss.backward()
+            nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_norm_clipping)
+            self.optimizer.step()
+
+            self.update_shared_state_dict()
+
+            #if (i % self.save_interval == 0):
+            #torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
+            torch.save(self.shared_state_dict.state_dict(), "checkpoints/model" + str(i) + ".pth")
+
+            t_ = time.perf_counter()
+            delta_t = t_ - t
+            steps = (actor_observations.shape[0] - 1) * actor_observations.shape[1]
+            if delta_t > 0.0:
+                print("FPS {:.1f} / Total steps {} / Baseline loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
+                        steps / (t_ - t),
+                        steps * i,
+                        baseline_loss,
+                        pg_loss,
+                        entropy_loss,
+                        total_loss,
+                        actor_rewards.mean().item() * 600.0,
+                    )
+                )
+            t = t_
+
+            time.sleep(0.1)
 
 
 def compute_baseline_loss(advantages):
