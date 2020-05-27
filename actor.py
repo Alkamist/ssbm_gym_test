@@ -19,7 +19,7 @@ class Actor(object):
         self.rnn_state = None
 
     def reset_rnn(self):
-        pass
+        self.rnn_state = torch.zeros(2, self.num_workers, 512, dtype=torch.float32, device=self.device)
         #self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
 
     def performing(self):
@@ -40,7 +40,7 @@ class Actor(object):
                     self.memory.rnn_states.append(self.rnn_state)
 
                     for _ in range(self.episode_steps):
-                        logits, baseline, action, self.rnn_state = self.policy(observation, self.rnn_state)
+                        logits, _, action, self.rnn_state = self.policy(observation, self.rnn_state)
 
                         self.memory.observations.append(observation)
                         self.memory.actions.append(action)
@@ -50,9 +50,9 @@ class Actor(object):
 
                         observation, reward, done, _ = step_env_with_timeout()
 
-                        done = torch.tensor([done], dtype=torch.bool, device=self.device)
+                        done = torch.tensor([done], dtype=torch.bool)
                         observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
-                        reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
+                        reward = torch.tensor([reward], dtype=torch.float32)
 
                         self.memory.rewards.append(reward)
                         self.memory.dones.append(done)
@@ -61,6 +61,7 @@ class Actor(object):
                 except KeyboardInterrupt:
                     self.env.close()
                 except:
+                    self.memory.clear_memory()
                     self.reset_rnn()
                     self.env.close()
                     for process in self.env.processes:
