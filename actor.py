@@ -23,7 +23,7 @@ class Actor(object):
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
         self.memory = Memory()
 
-        observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+        observations = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
 
         with torch.no_grad():
             while True:
@@ -31,25 +31,27 @@ class Actor(object):
                     self.policy.load_state_dict(self.shared_state_dict.state_dict())
                     self.policy.reset_rnn()
 
+                    self.memory.observations.append(observations)
+
                     for _ in range(self.episode_steps):
-                        logits, _, action = self.policy(observation)
+                        actions, action_log_probs = self.policy(observations)
 
-                        self.memory.observations.append(observation)
-                        self.memory.actions.append(action)
-                        self.memory.logits.append(logits)
+                        step_env_with_timeout = timeout(5)(lambda : self.env.step(actions[-1].cpu().numpy()))
 
-                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action[-1].cpu().numpy()))
+                        observations, rewards, dones, _ = step_env_with_timeout()
+                        observations = torch.tensor([observations], dtype=torch.float32, device=self.device)
 
-                        observation, reward, done, _ = step_env_with_timeout()
+                        self.memory.observations.append(observations)
+                        self.memory.actions.append(actions)
+                        self.memory.action_log_probs.append(action_log_probs)
+                        self.memory.rewards.append(torch.tensor([rewards], dtype=torch.float32))
+                        self.memory.dones.append(torch.tensor([dones], dtype=torch.bool))
 
-                        done = torch.tensor([done], dtype=torch.bool)
-                        observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
-                        reward = torch.tensor([reward], dtype=torch.float32)
+                    actions, action_log_probs = self.policy(observations)
+                    self.memory.actions.append(actions[0:-1])
+                    self.memory.action_log_probs.append(action_log_probs[0:-1])
 
-                        self.memory.rewards.append(reward)
-                        self.memory.dones.append(done)
-
-                    self.rollout_queue.put(self.memory.get_batch())
+                    self.rollout_queue.put(self.memory.get_rollout())
                 except KeyboardInterrupt:
                     self.env.close()
                 except:
@@ -67,18 +69,18 @@ class Memory:
     def clear_memory(self):
         self.observations = []
         self.actions = []
+        self.action_log_probs = []
         self.rewards = []
         self.dones = []
-        self.logits = []
 
-    def get_batch(self):
+    def get_rollout(self):
         observations = torch.cat(self.observations, dim=0).to('cpu')
         actions = torch.cat(self.actions, dim=0).to('cpu')
+        action_log_probs = torch.cat(self.action_log_probs, dim=0).to('cpu')
         rewards = torch.cat(self.rewards, dim=0).to('cpu')
         dones = torch.cat(self.dones, dim=0).to('cpu')
-        logits = torch.cat(self.logits, dim=0).to('cpu')
         self.clear_memory()
-        return (observations, actions, rewards, dones, logits)
+        return (observations, actions, action_log_probs, rewards, dones)
 
     def __len__(self):
         return len(self.actions)

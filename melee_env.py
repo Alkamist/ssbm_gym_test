@@ -169,23 +169,22 @@ class MeleeEnv():
         player2 = self._player_state_to_numpy(state.players[1])
         return np.concatenate((player1, player2))
 
-#    def _compute_reward(self):
-#        #return max(0.0, min(1.0, 1.0 - abs(self._dolphin_state.players[0].x - 15.0) * 0.07)) / 600.0
-#        return (1.0 / 600.0) if abs(self._dolphin_state.players[0].x - 15.0) < 5.0 else 0.0
-
     def _compute_reward(self):
-        reward = 0.0
+        return (1.0 / 600.0) if abs(self._dolphin_state.players[0].x - 15.0) < 5.0 else 0.0
 
-        reward += 0.003 * self._percent_taken_by_player(1)
-        reward -= 0.003 * self._percent_taken_by_player(0)
-
-        if self._player_just_died(1):
-            reward = 1.0
-
-        if self._player_just_died(0):
-            reward = -1.0
-
-        return reward
+#    def _compute_reward(self):
+#        reward = 0.0
+#
+#        reward += 0.003 * self._percent_taken_by_player(1)
+#        reward -= 0.003 * self._percent_taken_by_player(0)
+#
+#        if self._player_just_died(1):
+#            reward = 1.0
+#
+#        if self._player_just_died(0):
+#            reward = -1.0
+#
+#        return reward
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:

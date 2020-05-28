@@ -7,11 +7,11 @@ melee_options = dict(
     render=True,
     speed=1,
     player1='ai',
-    player2='cpu',
+    player2='human',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=1,
+    act_every=6,
 )
 
 if __name__ == "__main__":
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     observation = torch.tensor([[observation]], dtype=torch.float32)
 
     while True:
-        policy_logits, baseline, action = policy_net(observation)
+        action = policy_net.act(observation)
         observation, reward, done, _ = env.step(action)
         observation = torch.tensor([[observation]], dtype=torch.float32)
 
