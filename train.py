@@ -20,13 +20,13 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=6,
+    act_every=15,
 )
 
 num_actors = 3
 workers_per_actor = 4
-batch_size = 16
-episode_steps = 4
+batch_size = 64
+episode_steps = 20
 seed = 1
 #load_model = "checkpoints/agent.pth"
 load_model = None
@@ -64,7 +64,8 @@ if __name__ == "__main__":
     learner = Learner(
         observation_size=MeleeEnv.observation_size,
         num_actions=MeleeEnv.num_actions,
-        lr=3e-5,
+        #lr=3e-5,
+        lr=1e-4,
         c_hat=1.0,
         rho_hat=1.0,
         gamma=0.997,

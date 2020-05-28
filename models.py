@@ -41,8 +41,12 @@ class Policy(nn.Module):
         return action.detach(), action_log_prob.detach()
 
     def act(self, observation):
-        dist, self.rnn_state = self._forward(observation, self.rnn_state)
-        action = dist.sample()
+        x = self.core(observation)
+        h, self.rnn_state = self.rnn(x, self.rnn_state)
+        logits = self.policy(h[-1:])
+        dist = Categorical(logits=logits)
+        #action = dist.sample()
+        action = dist.probs.argmax(dim=-1, keepdim=True)
         return action.detach()
 
     def evaluate_actions(self, observations, actions, rnn_state=None):

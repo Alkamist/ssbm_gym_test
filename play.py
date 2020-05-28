@@ -11,12 +11,12 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=6,
+    act_every=15,
 )
 
 if __name__ == "__main__":
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
-    #policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
+    policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
     policy_net.eval()
 
     env = MeleeEnv(**melee_options)
