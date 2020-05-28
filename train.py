@@ -13,17 +13,17 @@ from experience_buffer import ExperienceBuffer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 melee_options = dict(
-    render=False,
-    speed=0,
+    render=True,
+    speed=1,
     player1='ai',
-    player2='human',
+    player2='ai',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
 )
 
-num_actors = 4
-workers_per_actor = 4
+num_actors = 2
+workers_per_actor = 2
 batch_size = 64
 episode_steps = 600
 seed = 1

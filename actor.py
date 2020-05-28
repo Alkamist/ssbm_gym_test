@@ -23,7 +23,7 @@ class Actor(object):
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
         self.memory = Memory()
 
-        observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+        observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device).flatten(1, 2)
 
         with torch.no_grad():
             while True:
@@ -38,18 +38,19 @@ class Actor(object):
                         self.memory.actions.append(action)
                         self.memory.logits.append(logits)
 
-                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action[-1].cpu().numpy()))
+                        step_env_with_timeout = timeout(5)(lambda : self.env.step(action[0].view(self.num_workers, 2).cpu().numpy()))
 
                         observation, reward, done, _ = step_env_with_timeout()
 
-                        done = torch.tensor([done], dtype=torch.bool)
-                        observation = torch.tensor([observation], dtype=torch.float32, device=self.device)
-                        reward = torch.tensor([reward], dtype=torch.float32)
+                        done = torch.tensor([done], dtype=torch.bool).flatten(1, 2)
+                        observation = torch.tensor([observation], dtype=torch.float32, device=self.device).flatten(1, 2)
+                        reward = torch.tensor([reward], dtype=torch.float32).flatten(1, 2)
 
                         self.memory.rewards.append(reward)
                         self.memory.dones.append(done)
 
                     self.rollout_queue.put(self.memory.get_batch())
+
                 except KeyboardInterrupt:
                     self.env.close()
                 except:

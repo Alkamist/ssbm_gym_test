@@ -114,7 +114,7 @@ def one_hot(x, n):
 
 class MeleeEnv():
     num_actions = 30
-    observation_size = 852
+    observation_size = 788
 
     def __init__(self, seed=None, **dolphin_options):
         super(MeleeEnv, self).__init__()
@@ -128,25 +128,24 @@ class MeleeEnv():
     def reset(self):
         self._previous_dolphin_state = None
         self._dolphin_state = self.dolphin.reset()
-        return [self._dolphin_state_to_numpy(self._dolphin_state, 0), self._dolphin_state_to_numpy(self._dolphin_state, 1)]
+        return self._dolphin_state_to_numpy(self._dolphin_state)
 
     def close(self):
         self.dolphin.close()
 
-    def step(self, actions):
-        self._dolphin_state = self.dolphin.step([_controller_states[actions[0]], _controller_states[actions[1]]])
+    def step(self, action):
+        self._dolphin_state = self.dolphin.step([_controller_states[action]])
 
-        observations = [self._dolphin_state_to_numpy(self._dolphin_state, 0), self._dolphin_state_to_numpy(self._dolphin_state, 1)]
-        rewards = [self._compute_rewards(0), self._compute_rewards(1)]
-        dones = [False, False]
+        observation = self._dolphin_state_to_numpy(self._dolphin_state)
+        reward = self._compute_reward()
+        done = False
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
-        return observations, rewards, dones, {}
+        return observation, reward, done, {}
 
     def _player_state_to_numpy(self, state):
         return np.array([
-            *one_hot(state.character, num_characters),
             *one_hot(state.action_state, num_melee_actions),
             state.x / 100.0,
             state.y / 100.0,
@@ -161,24 +160,24 @@ class MeleeEnv():
             state.jumps_used,
         ])
 
-    def _dolphin_state_to_numpy(self, state, player_perspective):
-        main_player = self._player_state_to_numpy(state.players[player_perspective])
-        other_player = self._player_state_to_numpy(state.players[1 - player_perspective])
-        return np.concatenate((main_player, other_player))
+    def _dolphin_state_to_numpy(self, state):
+        player1 = self._player_state_to_numpy(state.players[0])
+        player2 = self._player_state_to_numpy(state.players[1])
+        return np.concatenate((player1, player2))
 
-    def _compute_rewards(self, player_perspective):
-        main_player = player_perspective
-        other_player = 1 - player_perspective
+#    def _compute_reward(self):
+#        return (1.0 / 600.0) if abs(self._dolphin_state.players[0].x - 15.0) < 5.0 else 0.0
 
+    def _compute_reward(self):
         reward = 0.0
 
-        reward += 0.003 * self._percent_taken_by_player(other_player)
-        reward -= 0.003 * self._percent_taken_by_player(main_player)
+        reward += 0.003 * self._percent_taken_by_player(1)
+#        reward -= 0.003 * self._percent_taken_by_player(0)
 
-        if self._player_just_died(other_player):
-            reward = 1.0
+#        if self._player_just_died(1):
+#            reward = 1.0
 
-        if self._player_just_died(main_player):
+        if self._player_just_died(0):
             reward = -1.0
 
         return reward
