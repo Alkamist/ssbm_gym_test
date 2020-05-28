@@ -40,10 +40,11 @@ class Policy(nn.Module):
 
         dist = Categorical(logits=policy_logits)
 
-        if self.training:
-            action = dist.sample()
-        else:
-            action = dist.probs.argmax(dim=-1, keepdim=True)
+        #if self.training:
+        action = dist.sample()
+        action = action.clamp(0, self.action_size - 1)
+        #else:
+        #    action = dist.probs.argmax(dim=-1, keepdim=True)
 
         policy_logits = policy_logits.view(time_size, batch_size, self.action_size)
         baseline = baseline.view(time_size, batch_size)

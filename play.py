@@ -11,7 +11,6 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=1,
 )
 
 if __name__ == "__main__":
