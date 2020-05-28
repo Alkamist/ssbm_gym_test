@@ -18,10 +18,10 @@ NONE_stick = [
     #(0.5, 0.5), # Middle
     #(0.5, 0.0), # Down
     #(0.5, 1.0), # Up
-    (1.0, 0.5), # Right
-    (0.0, 0.5), # Left
-    #(0.35, 0.5), # Walk left
-    #(0.65, 0.5), # Walk right
+    #(1.0, 0.5), # Right
+    #(0.0, 0.5), # Left
+    (0.35, 0.5), # Walk left
+    (0.65, 0.5), # Walk right
 ]
 A_stick = [
     #(0.5, 0.5), # Neutral

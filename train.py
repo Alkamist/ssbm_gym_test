@@ -20,16 +20,16 @@ melee_options = dict(
     char1='falcon',
     char2='falcon',
     stage='final_destination',
-    act_every=15,
+    act_every=1,
 )
 
 num_actors = 3
 workers_per_actor = 4
 batch_size = 64
-episode_steps = 20
+episode_steps = 600
 seed = 1
-#load_model = "checkpoints/agent.pth"
-load_model = None
+load_model = "checkpoints/agent.pth"
+#load_model = None
 reset_policy = False
 
 def partial_load_model_to_state_dict(state_dict):
@@ -64,14 +64,11 @@ if __name__ == "__main__":
     learner = Learner(
         observation_size=MeleeEnv.observation_size,
         num_actions=MeleeEnv.num_actions,
-        #lr=3e-5,
-        lr=1e-4,
-        c_hat=1.0,
-        rho_hat=1.0,
-        gamma=0.997,
-        value_loss_coef=0.5,
-        entropy_coef=0.0025,
-        max_grad_norm=0.5,
+        lr=3e-5,
+        discounting=0.99,
+        baseline_cost=0.5,
+        entropy_cost=0.0025,
+        grad_norm_clipping=40.0,
         save_interval=1,
         seed=seed,
         queue_batch=experience_buffer.queue_batch,
