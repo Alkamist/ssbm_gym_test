@@ -14,20 +14,13 @@ class Actor(object):
         self.rank = rank
         self.env = None
         self.policy = None
-        self.opponent= None
         self.memory = None
-        self.rnn_state = None
-
-    def reset_rnn(self):
-        self.rnn_state = torch.zeros(2, self.num_workers, 512, dtype=torch.float32, device=self.device)
-        #self.rnn_state = torch.zeros(self.policy.rnn.num_layers, self.num_workers, self.policy.rnn.hidden_size, dtype=torch.float32, device=self.device)
 
     def performing(self):
         torch.manual_seed(self.seed + self.rank)
 
         self.env = self.create_env_fn(self.rank)
         self.policy = Policy(self.env.observation_space.n, self.env.action_space.n).to(self.device)
-        self.reset_rnn()
         self.memory = Memory()
 
         observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
@@ -36,11 +29,10 @@ class Actor(object):
             while True:
                 try:
                     self.policy.load_state_dict(self.shared_state_dict.state_dict())
-
-                    self.memory.rnn_states.append(self.rnn_state)
+                    self.policy.reset_rnn()
 
                     for _ in range(self.episode_steps):
-                        logits, _, action, self.rnn_state = self.policy(observation, self.rnn_state)
+                        logits, _, action = self.policy(observation)
 
                         self.memory.observations.append(observation)
                         self.memory.actions.append(action)
@@ -62,7 +54,6 @@ class Actor(object):
                     self.env.close()
                 except:
                     self.memory.clear_memory()
-                    self.reset_rnn()
                     self.env.close()
                     for process in self.env.processes:
                         process.terminate()
@@ -79,7 +70,6 @@ class Memory:
         self.rewards = []
         self.dones = []
         self.logits = []
-        self.rnn_states = []
 
     def get_batch(self):
         observations = torch.cat(self.observations, dim=0).to('cpu')
@@ -87,9 +77,8 @@ class Memory:
         rewards = torch.cat(self.rewards, dim=0).to('cpu')
         dones = torch.cat(self.dones, dim=0).to('cpu')
         logits = torch.cat(self.logits, dim=0).to('cpu')
-        rnn_states = torch.cat(self.rnn_states, dim=0).to('cpu')
         self.clear_memory()
-        return (observations, actions, rewards, dones, logits, rnn_states)
+        return (observations, actions, rewards, dones, logits)
 
     def __len__(self):
         return len(self.actions)

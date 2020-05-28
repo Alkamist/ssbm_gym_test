@@ -16,7 +16,7 @@ melee_options = dict(
     render=False,
     speed=0,
     player1='ai',
-    player2='human',
+    player2='cpu',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
@@ -44,8 +44,8 @@ def create_vectorized_env(actor_rank):
         global melee_options
         unique_id = worker_id + (actor_rank * workers_per_actor)
         modified_melee_options = deepcopy(melee_options)
-        if unique_id == 1:
-            modified_melee_options["render"] = True
+        #if unique_id == 1:
+        #    modified_melee_options["render"] = True
         return lambda : MeleeEnv(worker_id=unique_id, **modified_melee_options)
     return VectorizedEnv([get_melee_env_fn(worker_id) for worker_id in range(workers_per_actor)])
 
@@ -64,13 +64,12 @@ if __name__ == "__main__":
     learner = Learner(
         observation_size=MeleeEnv.observation_size,
         num_actions=MeleeEnv.num_actions,
-        #lr=3e-5,
-        lr=0.001,
+        lr=3e-5,
         discounting=0.99,
         baseline_cost=0.5,
         entropy_cost=0.0025,
         grad_norm_clipping=40.0,
-        save_interval=2,
+        save_interval=5,
         seed=seed,
         queue_batch=experience_buffer.queue_batch,
         shared_state_dict=shared_state_dict,

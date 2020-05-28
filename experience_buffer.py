@@ -8,7 +8,6 @@ class ExperienceBuffer():
         self.rewards = []
         self.dones = []
         self.logits = []
-        self.rnn_states = []
 
         self.queue_trace = Queue(maxsize=30)
         self.queue_batch = Queue(maxsize=3)
@@ -24,7 +23,6 @@ class ExperienceBuffer():
             self.rewards.append(trace[2])
             self.dones.append(trace[3])
             self.logits.append(trace[4])
-            self.rnn_states.append(trace[5])
 
             self.num_traces += trace[0].shape[1]
 
@@ -36,20 +34,17 @@ class ExperienceBuffer():
                 rewards_batch, rewards_remain = torch.cat(self.rewards, dim=1).split([self.batch_size, self.num_traces], dim=1)
                 dones_batch, dones_remain = torch.cat(self.dones, dim=1).split([self.batch_size, self.num_traces], dim=1)
                 logits_batch, logits_remain = torch.cat(self.logits, dim=1).split([self.batch_size, self.num_traces], dim=1)
-                rnn_states_batch, rnn_states_remain = torch.cat(self.rnn_states, dim=1).split([self.batch_size, self.num_traces], dim=1)
 
                 self.observations = [observations_remain]
                 self.actions = [actions_remain]
                 self.rewards = [rewards_remain]
                 self.dones = [dones_remain]
                 self.logits = [logits_remain]
-                self.rnn_states = [rnn_states_remain]
 
                 self.queue_batch.put((
                     observations_batch,
                     actions_batch,
                     rewards_batch,
                     dones_batch,
-                    logits_batch,
-                    rnn_states_batch
+                    logits_batch
                 ))

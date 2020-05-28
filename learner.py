@@ -38,7 +38,7 @@ class Learner(object):
             i += 1
 
             try:
-                actor_observations, actor_actions, actor_rewards, actor_dones, actor_logits, actor_rnn_states = self.queue_batch.get(block=True)
+                actor_observations, actor_actions, actor_rewards, actor_dones, actor_logits = self.queue_batch.get(block=True)
             except queue.Empty:
                 pass
 
@@ -47,9 +47,9 @@ class Learner(object):
             actor_rewards = actor_rewards.to(self.device)
             actor_dones = actor_dones.to(self.device)
             actor_logits = actor_logits.to(self.device)
-            actor_rnn_states = actor_rnn_states.to(self.device)
 
-            learner_logits, learner_baselines, _, _ = self.policy(actor_observations, actor_rnn_states)
+            self.policy.reset_rnn()
+            learner_logits, learner_baselines, _ = self.policy(actor_observations)
 
             # Take final value function slice for bootstrapping.
             bootstrap_value = learner_baselines[-1]
@@ -87,9 +87,8 @@ class Learner(object):
 
             self.update_shared_state_dict()
 
-            #if (i % self.save_interval == 0):
-            #torch.save(self.shared_state_dict.state_dict(), "checkpoints/model.pth")
-            torch.save(self.shared_state_dict.state_dict(), "checkpoints/model" + str(i) + ".pth")
+            if (i % self.save_interval == 0):
+                torch.save(self.shared_state_dict.state_dict(), "checkpoints/model" + str(i) + ".pth")
 
             t_ = time.perf_counter()
             delta_t = t_ - t

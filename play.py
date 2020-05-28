@@ -16,17 +16,15 @@ melee_options = dict(
 
 if __name__ == "__main__":
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
-    policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
+    #policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
     policy_net.eval()
-
-    rnn_state = torch.zeros(policy_net.rnn.num_layers, 1, policy_net.rnn.hidden_size, dtype=torch.float32)
 
     env = MeleeEnv(**melee_options)
     observation = env.reset()
     observation = torch.tensor([[observation]], dtype=torch.float32)
 
     while True:
-        policy_logits, baseline, action, rnn_state = policy_net(observation, rnn_state)
+        policy_logits, baseline, action = policy_net(observation)
         observation, reward, done, _ = env.step(action)
         observation = torch.tensor([[observation]], dtype=torch.float32)
 
