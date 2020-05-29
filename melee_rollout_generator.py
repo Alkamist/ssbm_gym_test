@@ -1,7 +1,32 @@
+import random
+import threading
+
 import torch
 import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
+
+def call_env_function(env_function, output, args):
+    if args is None:
+        output.append(env_function())
+    else:
+        output.append(env_function(args))
+
+def threaded_env_function_call(envs, function_name, function_args_list=None):
+    output = []
+    threads = []
+
+    for pool_id, env in enumerate(envs):
+        env_function = getattr(env, function_name)
+        function_args = function_args_list[pool_id] if isinstance(function_args_list, list) else None
+        t = threading.Thread(target=call_env_function, args=(env_function, output, function_args))
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
+
+    return output
 
 class Rollout(object):
     def __init__(self, rollout_steps):
@@ -14,48 +39,54 @@ class Rollout(object):
     def __len__(self):
         return self.rollout_steps
 
-class MeleeActor(object):
-    def __init__(self, actor_id, rollout_steps, rollout_queue, seed, device, dolphin_options):
-        self.actor_id = actor_id
+class SynchronousMeleeActorPool(object):
+    def __init__(self, pool_id, num_actors, rollout_steps, rollout_queue, seed, device, dolphin_options):
+        self.pool_id = pool_id
+        self.num_actors = num_actors
         self.rollout_steps = rollout_steps
         self.rollout_queue = rollout_queue
         self.seed = seed
         self.device = device
         self.dolphin_options = dolphin_options
-        self.env = None
+        self.num_ai_players = 2
+        self.melee_envs = None
 
     def run(self):
-        self.env = MeleeEnv(worker_id=self.actor_id, **self.dolphin_options)
+        self.melee_envs = [MeleeEnv(worker_id=(self.pool_id * self.num_actors) + actor_id, **self.dolphin_options) for actor_id in range(self.num_actors)]
 
-        states = self.env.reset()
+        states = threaded_env_function_call(self.melee_envs, "reset")
 
         with torch.no_grad():
             while True:
-                try:
-                    rollout = Rollout(self.rollout_steps)
+#                try:
+                rollout = Rollout(self.rollout_steps)
 
-                    for _ in range(self.rollout_steps):
-                        actions = [self.env.action_space.sample() for _ in range(2)]
+                for _ in range(self.rollout_steps):
+                    actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(self.num_ai_players)] for _ in range(self.num_actors)]
 
-                        rollout.states.append(states)
-                        rollout.actions.append(actions)
+                    rollout.states.append(states)
+                    rollout.actions.append(actions)
 
-                        step_env_with_timeout = timeout(5)(lambda : self.env.step(actions))
-                        states, rewards, dones, _ = step_env_with_timeout()
+                    #step_env_with_timeout = timeout(5)(lambda : self.env.step(actions))
+                    #states, rewards, dones, _ = step_env_with_timeout()
 
-                        rollout.rewards.append(rewards)
-                        rollout.dones.append(dones)
+                    outputs = threaded_env_function_call(self.melee_envs, "step", actions)
 
-                    self.rollout_queue.put(rollout)
+                    #rollout.rewards.append(rewards)
+                    #rollout.dones.append(dones)
 
-                except KeyboardInterrupt:
-                    self.env.close()
-                except:
-                    self.rollout_queue.put(self.actor_id)
+                self.rollout_queue.put(rollout)
+
+#                except KeyboardInterrupt:
+#                    self.env.close()
+#
+#                except:
+#                    self.rollout_queue.put(self.pool_id)
 
 class MeleeRolloutGenerator(object):
-    def __init__(self, num_actors, rollout_steps, seed, device, dolphin_options):
-        self.num_actors = num_actors
+    def __init__(self, num_actor_pools, num_actors_per_pool, rollout_steps, seed, device, dolphin_options):
+        self.num_actor_pools = num_actor_pools
+        self.num_actors_per_pool = num_actors_per_pool
         self.rollout_steps = rollout_steps
         self.seed = seed
         self.device = device
@@ -63,40 +94,42 @@ class MeleeRolloutGenerator(object):
 
         self.rollout_queue = mp.Queue()
 
-        self.actors = [None] * self.num_actors
-        self.actor_processes = [None] * self.num_actors
-        for actor_id in range(self.num_actors):
-            self.create_new_actor(actor_id)
+        self.actor_pools = [None] * self.num_actor_pools
+        self.actor_pool_processes = [None] * self.num_actor_pools
 
-    def create_new_actor(self, actor_id):
-        actor = MeleeActor(
-            actor_id = actor_id,
+        for pool_id in range(self.num_actor_pools):
+            self.create_new_actor_pool(pool_id)
+
+    def create_new_actor_pool(self, pool_id):
+        actor = SynchronousMeleeActorPool(
+            pool_id = pool_id,
+            num_actors = self.num_actors_per_pool,
             rollout_steps = self.rollout_steps,
             rollout_queue = self.rollout_queue,
             seed = self.seed,
             device = self.device,
             dolphin_options = self.dolphin_options
         )
-        actor_process = mp.Process(target=actor.run)
+        actor_pool_process = mp.Process(target=actor.run)
 
-        if self.actor_processes[actor_id] is not None:
-            self.actor_processes[actor_id].terminate()
+        if self.actor_pool_processes[pool_id] is not None:
+            self.actor_pool_processes[pool_id].terminate()
 
-        self.actor_processes[actor_id] = actor_process
-        self.actors[actor_id] = actor
-        self.actor_processes[actor_id].start()
+        self.actor_pool_processes[pool_id] = actor_pool_process
+        self.actor_pools[pool_id] = actor
+        self.actor_pool_processes[pool_id].start()
 
-    def join_actor_processes(self):
-        for actor_process in self.actor_processes:
-            actor_process.join()
+    def join_actor_pool_processes(self):
+        for actor_pool_process in self.actor_pool_processes:
+            actor_pool_process.join()
 
     def generate_rollout(self):
         rollout = self.rollout_queue.get()
 
         # Restart any crashed Dolphin instances.
         while not isinstance(rollout, Rollout):
-            crashed_actor_id = rollout
-            self.create_new_actor(crashed_actor_id)
+            crashed_actor_pool_id = rollout
+            self.create_new_actor_pool(crashed_actor_pool_id)
             rollout = self.rollout_queue.get()
 
         return rollout
@@ -128,120 +161,3 @@ def timeout(seconds_before_timeout):
             return ret
         return wrapper
     return deco
-
-
-
-
-
-
-
-#import torch
-#import torch.multiprocessing as mp
-#
-#from melee_env import MeleeEnv
-#
-#def _run_melee(output_queue, actor_id, dolphin_options):
-#    env = MeleeEnv(worker_id=actor_id, **dolphin_options)
-#
-#    observation = env.reset()
-#    while True:
-#        actions = [env.action_space.sample() for _ in range(2)]
-#        observations, rewards, done, _ = env.step(actions)
-#        output_queue.put(1)
-#
-#class MeleeRolloutGenerator():
-#    def __init__(self, num_actors, workers_per_actor, dolphin_options):
-#        self.num_actors = num_actors
-#        self.workers_per_actor = workers_per_actor
-#        self.dolphin_options = dolphin_options
-#        self.melee_processes = [None] * self.num_actors
-#        self.output_queue = mp.Queue
-#
-#    def start(self):
-#        for actor_id in range(self.num_actors):
-#            self.start_melee_process(actor_id)
-#
-#
-#
-#    def start_melee_process(self, actor_id):
-#        p = mp.Process(target=_run_melee, args=(self.output_queue, actor_id, self.dolphin_options))
-#        p.start()
-#        self.melee_processes[actor_id] = p
-
-
-
-
-
-
-#if __name__ == "__main__":
-#    output_queue = mp.Queue()
-#
-#    melee_processes = []
-#    for actor_id in range(num_actors):
-#        p = mp.Process(target=run_melee, args=(actor_id, output_queue))
-#        p.start()
-#        melee_processes.append(p)
-#
-#    total_frames = 0
-#    while True:
-#        frames = output_queue.get()
-#        total_frames += frames
-#
-#        if total_frames % 3600 == 0:
-#            print(total_frames)
-#
-#    for p in melee_processes:
-#        p.join()
-
-
-
-
-
-
-
-
-
-
-#def call_env_function(env_function, output, args):
-#    if args is None:
-#        output.append(env_function())
-#    else:
-#        output.append(env_function(args))
-#
-#def threaded_env_function_call(envs, function_name, function_args_list=None):
-#    output = []
-#    threads = []
-#
-#    for actor_id, env in enumerate(envs):
-#        env_function = getattr(env, function_name)
-#        function_args = function_args_list[actor_id] if isinstance(function_args_list, list) else None
-#        t = threading.Thread(target=call_env_function, args=(env_function, output, function_args))
-#        t.start()
-#        threads.append(t)
-#
-#    for t in threads:
-#        t.join()
-#
-#    return output
-#
-#if __name__ == "__main__":
-#    melee_envs = [MeleeEnv(worker_id=actor_id, **dolphin_options) for actor_id in range(num_actors)]
-#
-#    observations = threaded_env_function_call(melee_envs, "reset")
-#
-#    frames_since_last_print = 0
-#    t = time.perf_counter()
-#    while True:
-#        actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(2)] for _ in range(num_actors)]
-#
-#        outputs = threaded_env_function_call(melee_envs, "step", actions)
-#        #observations, rewards, done, _ = env.step(actions)
-#
-#        frames_since_last_print += num_actors
-#
-#        t_ = time.perf_counter()
-#        delta_t = t_ - t
-#        if delta_t >= 1.0:
-#            print(frames_since_last_print)
-#            frames_since_last_print = 0
-#            t = t_
