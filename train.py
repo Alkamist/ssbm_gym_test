@@ -3,8 +3,8 @@ import torch
 from melee_rollout_generator import MeleeRolloutGenerator
 
 melee_options = dict(
-    render=True,
-    speed=1,
+    render=False,
+    speed=0,
     player1='ai',
     player2='ai',
     char1='falcon',
@@ -13,8 +13,8 @@ melee_options = dict(
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_actor_pools = 2
-num_actors_per_pool = 2
+num_actor_pools = 4
+num_actors_per_pool = 4
 rollout_steps = 600
 seed = 1
 

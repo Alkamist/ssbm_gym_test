@@ -58,30 +58,38 @@ class SynchronousMeleeActorPool(object):
 
         with torch.no_grad():
             while True:
-#                try:
-                rollout = Rollout(self.rollout_steps)
+                try:
+                    rollout = Rollout(self.rollout_steps)
 
-                for _ in range(self.rollout_steps):
-                    actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(self.num_ai_players)] for _ in range(self.num_actors)]
+                    for _ in range(self.rollout_steps):
+                        actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(self.num_ai_players)] for _ in range(self.num_actors)]
 
-                    rollout.states.append(states)
-                    rollout.actions.append(actions)
+                        rollout.states.append(states)
+                        rollout.actions.append(actions)
 
-                    #step_env_with_timeout = timeout(5)(lambda : self.env.step(actions))
-                    #states, rewards, dones, _ = step_env_with_timeout()
+                        step_env_with_timeout = timeout(5)(lambda : threaded_env_function_call(self.melee_envs, "step", actions))
+                        outputs = step_env_with_timeout()
 
-                    outputs = threaded_env_function_call(self.melee_envs, "step", actions)
+                        states, rewards, dones = [], [], []
+                        for actor_id in range(self.num_actors):
+                            state, reward, done, _ = outputs[actor_id]
+                            states.append(state)
+                            rewards.append(reward)
+                            dones.append(done)
 
-                    #rollout.rewards.append(rewards)
-                    #rollout.dones.append(dones)
+                        rollout.rewards.append(rewards)
+                        rollout.dones.append(dones)
 
-                self.rollout_queue.put(rollout)
+                    self.rollout_queue.put(rollout)
 
-#                except KeyboardInterrupt:
-#                    self.env.close()
-#
-#                except:
-#                    self.rollout_queue.put(self.pool_id)
+                except KeyboardInterrupt:
+                    for env in self.melee_envs:
+                        env.close()
+
+                except:
+                    for env in self.melee_envs:
+                        env.close()
+                    self.rollout_queue.put(self.pool_id)
 
 class MeleeRolloutGenerator(object):
     def __init__(self, num_actor_pools, num_actors_per_pool, rollout_steps, seed, device, dolphin_options):
@@ -126,7 +134,7 @@ class MeleeRolloutGenerator(object):
     def generate_rollout(self):
         rollout = self.rollout_queue.get()
 
-        # Restart any crashed Dolphin instances.
+        # Restart any crashed actor pools.
         while not isinstance(rollout, Rollout):
             crashed_actor_pool_id = rollout
             self.create_new_actor_pool(crashed_actor_pool_id)
