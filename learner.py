@@ -101,7 +101,7 @@ class Learner(object):
                         pg_loss,
                         entropy_loss,
                         total_loss,
-                        actor_rewards.mean().item() * 3600.0,
+                        actor_rewards.mean().item() * 1200.0,
                     )
                 )
             t = t_

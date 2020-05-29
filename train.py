@@ -25,10 +25,10 @@ melee_options = dict(
 num_actors = 4
 workers_per_actor = 4
 batch_size = 64
-episode_steps = 300
+episode_steps = 600
 seed = 1
-#load_model = "checkpoints/agent.pth"
-load_model = None
+load_model = "checkpoints/agent.pth"
+#load_model = None
 reset_policy = False
 
 def partial_load_model_to_state_dict(state_dict):

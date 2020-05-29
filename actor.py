@@ -59,7 +59,7 @@ class Actor(object):
                     for process in self.env.processes:
                         process.terminate()
                     self.env = self.create_env_fn(self.rank)
-                    observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device)
+                    observation = torch.tensor([self.env.reset()], dtype=torch.float32, device=self.device).flatten(1, 2)
 
 class Memory:
     def __init__(self):
