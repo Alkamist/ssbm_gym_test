@@ -17,7 +17,7 @@ melee_options = dict(
 
 if __name__ == "__main__":
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions).to(device=device)
-    #policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
+    policy_net.load_state_dict(torch.load("checkpoints/agent.pth", map_location='cpu'))
     policy_net.eval()
 
     env = MeleeEnv(**melee_options)

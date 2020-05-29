@@ -13,8 +13,8 @@ from experience_buffer import ExperienceBuffer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 melee_options = dict(
-    render=True,
-    speed=1,
+    render=False,
+    speed=0,
     player1='ai',
     player2='ai',
     char1='falcon',
@@ -22,10 +22,10 @@ melee_options = dict(
     stage='final_destination',
 )
 
-num_actors = 2
-workers_per_actor = 2
+num_actors = 4
+workers_per_actor = 4
 batch_size = 64
-episode_steps = 600
+episode_steps = 300
 seed = 1
 #load_model = "checkpoints/agent.pth"
 load_model = None
