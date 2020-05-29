@@ -63,11 +63,11 @@ for button, stick in enumerate([NONE_stick, A_stick, B_stick, Z_stick, Y_stick, 
     _controller += [SimpleController.init(*args) for args in product([SimpleButton(button)], stick)]
 _controller_states = [a.real_controller for a in _controller]
 
-class MeleeObservationSpace():
+class MeleeObservationSpace(object):
     def __init__(self, n):
         self.n = n
 
-class MeleeActionSpace():
+class MeleeActionSpace(object):
     def __init__(self, n, seed):
         assert n >= 0
         self.dtype = np.int64
@@ -113,12 +113,11 @@ def one_hot(x, n):
     return y
 
 
-class MeleeEnv():
+class MeleeEnv(object):
     num_actions = 30
     observation_size = 852
 
     def __init__(self, seed=None, **dolphin_options):
-        super(MeleeEnv, self).__init__()
         self.dolphin = DolphinAPI(**dolphin_options)
         self.seed = seed
         self.action_space = MeleeActionSpace(self.num_actions, seed)

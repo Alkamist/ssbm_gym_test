@@ -1,13 +1,6 @@
-import time
-import threading
-import random
+import torch
 
-#import torch
-#import torch.multiprocessing as mp
-
-from melee_env import MeleeEnv
-
-#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from melee_rollout_generator import MeleeRolloutGenerator
 
 melee_options = dict(
     render=False,
@@ -19,48 +12,25 @@ melee_options = dict(
     stage='final_destination',
 )
 
-num_actors = 16
-
-def call_env_function(env_function, output, args):
-    if args is None:
-        output.append(env_function())
-    else:
-        output.append(env_function(args))
-
-def threaded_env_function_call(envs, function_name, function_args_list=None):
-    output = []
-    threads = []
-
-    for actor_id, env in enumerate(envs):
-        env_function = getattr(env, function_name)
-        function_args = function_args_list[actor_id] if isinstance(function_args_list, list) else None
-        t = threading.Thread(target=call_env_function, args=(env_function, output, function_args))
-        t.start()
-        threads.append(t)
-
-    for t in threads:
-        t.join()
-
-    return output
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+num_actors = 4
+rollout_steps = 600
+seed = 1
 
 if __name__ == "__main__":
-    melee_envs = [MeleeEnv(worker_id=actor_id, **melee_options) for actor_id in range(num_actors)]
+    melee_rollout_generator = MeleeRolloutGenerator(
+        num_actors=num_actors,
+        rollout_steps=rollout_steps,
+        seed=seed,
+        device=device,
+        dolphin_options=melee_options,
+    )
 
-    observations = threaded_env_function_call(melee_envs, "reset")
-
-    frames_since_last_print = 0
-    t = time.perf_counter()
+    total_frames = 0
     while True:
-        actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(2)] for _ in range(num_actors)]
+        rollout = melee_rollout_generator.generate_rollout()
 
-        outputs = threaded_env_function_call(melee_envs, "step", actions)
-        #observations, rewards, done, _ = env.step(actions)
+        total_frames += len(rollout)
+        print(total_frames)
 
-        frames_since_last_print += num_actors
-
-        t_ = time.perf_counter()
-        delta_t = t_ - t
-        if delta_t >= 1.0:
-            print(frames_since_last_print)
-            frames_since_last_print = 0
-            t = t_
+    melee_rollout_generator.join_actor_processes()
