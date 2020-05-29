@@ -1,3 +1,4 @@
+import math
 from itertools import product
 from copy import deepcopy
 
@@ -174,6 +175,14 @@ class MeleeEnv():
 
         reward += 0.003 * self._percent_taken_by_player(other_player)
         #reward -= 0.003 * self._percent_taken_by_player(main_player)
+
+        main_x = self._dolphin_state.players[main_player].x
+        other_x = self._dolphin_state.players[other_player].x
+        main_y = self._dolphin_state.players[main_player].y
+        other_y = self._dolphin_state.players[other_player].y
+        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+
+        reward += 0.00005 * (20.0 - distance)
 
         #if self._player_just_died(other_player):
         #    reward = 1.0

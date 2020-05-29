@@ -27,17 +27,6 @@ class Stick(enum.Enum):
     C = 1
 
 class Pad:
-    pad_id = -1
-
-    @classmethod
-    def increment_pad_id(cls):
-        cls.pad_id += 1
-        return cls.pad_id
-
-    @classmethod
-    def reset_pad_id(cls):
-        cls.pad_id = -1
-
     def get_tcp_port(self):
         min_mw_tcp_port = 5555
         max_workers = 11520
@@ -46,7 +35,7 @@ class Pad:
         return start_offset + self.pad_id + max_pads_per_worker * self.worker_id
 
     def __init__(self, path, tcp=False, worker_id=0):
-        self.pad_id = self.increment_pad_id()
+        self.pad_id = int(path[-1])
         self.worker_id = worker_id
         self.tcp = tcp
         if tcp:
@@ -75,7 +64,6 @@ class Pad:
             self.pipe.close()
         else:
             self.socket.close()
-            self.reset_pad_id()
 
     def write(self, command, buffering=False):
         self.message += command + '\n'
