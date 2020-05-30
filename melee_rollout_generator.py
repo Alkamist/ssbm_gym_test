@@ -33,6 +33,7 @@ class Rollout(object):
         self.rollout_steps = rollout_steps
         self.states = []
         self.actions = []
+        self.next_states = []
         self.rewards = []
         self.dones = []
 
@@ -59,28 +60,35 @@ class SynchronousMeleeActorPool(object):
         with torch.no_grad():
             while True:
                 try:
-                    rollout = Rollout(self.rollout_steps)
+                    rollouts = [Rollout(self.rollout_steps) for _ in range(self.num_ai_players * self.num_actors)]
 
                     for _ in range(self.rollout_steps):
                         actions = [[random.randrange(MeleeEnv.num_actions) for _ in range(self.num_ai_players)] for _ in range(self.num_actors)]
 
-                        rollout.states.append(states)
-                        rollout.actions.append(actions)
-
                         step_env_with_timeout = timeout(5)(lambda : threaded_env_function_call(self.melee_envs, "step", actions))
                         outputs = step_env_with_timeout()
 
-                        states, rewards, dones = [], [], []
+                        next_states, rewards, dones = [], [], []
                         for actor_id in range(self.num_actors):
-                            state, reward, done, _ = outputs[actor_id]
-                            states.append(state)
+                            next_state, reward, done, _ = outputs[actor_id]
+                            next_states.append(next_state)
                             rewards.append(reward)
                             dones.append(done)
 
-                        rollout.rewards.append(rewards)
-                        rollout.dones.append(dones)
+                        i = 0
+                        for actor_id in range(self.num_actors):
+                            for player_id in range(self.num_ai_players):
+                                rollouts[i].states.append(states[actor_id][player_id])
+                                rollouts[i].actions.append(actions[actor_id][player_id])
+                                rollouts[i].next_states.append(next_states[actor_id][player_id])
+                                rollouts[i].rewards.append(rewards[actor_id][player_id])
+                                rollouts[i].dones.append(dones[actor_id][player_id])
+                                i += 1
 
-                    self.rollout_queue.put(rollout)
+                        states = next_states
+
+                    for rollout in rollouts:
+                        self.rollout_queue.put(rollout, block=False)
 
                 except KeyboardInterrupt:
                     for env in self.melee_envs:
@@ -99,6 +107,8 @@ class MeleeRolloutGenerator(object):
         self.seed = seed
         self.device = device
         self.dolphin_options = dolphin_options
+        self.state_size = MeleeEnv.observation_size
+        self.num_actions = MeleeEnv.num_actions
 
         self.rollout_queue = mp.Queue()
 
@@ -132,7 +142,7 @@ class MeleeRolloutGenerator(object):
             actor_pool_process.join()
 
     def generate_rollout(self):
-        rollout = self.rollout_queue.get()
+        rollout = self.rollout_queue.get(block=False)
 
         # Restart any crashed actor pools.
         while not isinstance(rollout, Rollout):
