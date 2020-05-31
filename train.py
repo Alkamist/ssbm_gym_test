@@ -21,7 +21,7 @@ learn_every = 600
 replay_buffer_size = 100000
 num_actor_pools = 3
 num_actors_per_pool = 4
-rollout_steps = 300
+rollout_steps = 30
 seed = 1
 
 
@@ -40,24 +40,17 @@ if __name__ == "__main__":
 
     total_rollouts = 0
     while True:
-        try:
-            rollout = melee_rollout_generator.generate_rollout()
-        except:
-            rollout = None
+        rollout = melee_rollout_generator.generate_rollout()
+        total_rollouts += 1
 
-        if rollout is not None:
-            total_rollouts += 1
+        replay_buffer.add_rollout(rollout)
 
-            replay_buffer.add_rollout(rollout)
+        if len(replay_buffer) > batch_size:
+            network.learn(replay_buffer.sample(batch_size), batch_size)
 
-            print(melee_rollout_generator.rollout_queue.qsize())
-
-#            if len(replay_buffer) > batch_size:
-#                network.learn(replay_buffer.sample(batch_size), batch_size)
-#
-#            if total_rollouts % 60 == 0:
-#                total_frames = total_rollouts * rollout_steps
-#                print("Total Frames: %i" % total_frames)
-#                network.save("checkpoints/agent" + str(total_frames) + ".pth")
+        if total_rollouts % 60 == 0:
+            total_frames = total_rollouts * rollout_steps
+            print("Total Frames: %i" % total_frames)
+            network.save("checkpoints/agent" + str(total_frames) + ".pth")
 
     melee_rollout_generator.join_actor_pool_processes()

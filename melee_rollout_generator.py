@@ -88,7 +88,7 @@ class SynchronousMeleeActorPool(object):
                         states = next_states
 
                     for rollout in rollouts:
-                        self.rollout_queue.put(rollout, block=False)
+                        self.rollout_queue.put(rollout, block=True)
 
                 except KeyboardInterrupt:
                     for env in self.melee_envs:
@@ -142,7 +142,7 @@ class MeleeRolloutGenerator(object):
             actor_pool_process.join()
 
     def generate_rollout(self):
-        rollout = self.rollout_queue.get(block=False)
+        rollout = self.rollout_queue.get(block=True)
 
         # Restart any crashed actor pools.
         while not isinstance(rollout, Rollout):

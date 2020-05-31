@@ -60,18 +60,10 @@ class DQN():
         self.policy_net.train()
         self.target_net.eval()
 
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward, 1)
+        state_action_values = self.policy_net(batch.state).gather(1, batch.action)
+        next_state_values = self.target_net(batch.next_state).max(1)[0].detach()
 
-        non_final_mask = torch.as_tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-
-        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
-
-        next_state_values = torch.zeros(batch_size, device=self.device)
-        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
-        expected_state_action_values = (next_state_values * self.gamma) + reward_batch[0]
+        expected_state_action_values = (next_state_values * self.gamma) + batch.reward
 
         loss = self.loss_criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
