@@ -2,18 +2,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.distributions import Categorical
 
 import random
 
-class QNetwork(nn.Module):
+class Network(nn.Module):
     def __init__(self, input_size, output_size, hidden_size=256):
-        super(QNetwork, self).__init__()
+        super(Network, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        torch.nn.init.kaiming_uniform_(self.fc1.weight)
+        #torch.nn.init.kaiming_uniform_(self.fc1.weight)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        torch.nn.init.kaiming_uniform_(self.fc2.weight)
+        #torch.nn.init.kaiming_uniform_(self.fc2.weight)
         self.fc3 = nn.Linear(hidden_size, output_size)
-        torch.nn.init.kaiming_uniform_(self.fc3.weight)
+        #torch.nn.init.kaiming_uniform_(self.fc3.weight)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -21,14 +22,14 @@ class QNetwork(nn.Module):
         return self.fc3(x)
 
 class DQN():
-    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.997, target_update_frequency=1000):
+    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.997, target_update_frequency=10):
         self.state_size = state_size
         self.action_size = action_size
         self.lr = lr
         self.gamma = gamma
         self.device = device
-        self.policy_net = QNetwork(state_size, action_size).to(self.device)
-        self.target_net = QNetwork(state_size, action_size).to(self.device)
+        self.policy_net = Network(state_size, action_size).to(self.device)
+        self.target_net = Network(state_size, action_size).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
         self.loss_criterion = torch.nn.SmoothL1Loss()
@@ -37,11 +38,11 @@ class DQN():
         self.num_ai_players = 2
 
     def act(self, state, epsilon=0.0):
-        if random.random() > epsilon:
-            with torch.no_grad():
-                return self.policy_net(state).max(2)[1]
-        else:
-            return torch.tensor([[random.randrange(self.action_size) for _ in range(self.num_ai_players)]], device=self.device, dtype=torch.long)
+        with torch.no_grad():
+            if random.random() > epsilon:
+                return self.policy_net(state).max(1)[1]
+            else:
+                return torch.tensor([random.randrange(self.action_size) for _ in range(self.num_ai_players)], device=self.device, dtype=torch.long)
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
@@ -56,7 +57,7 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, batch, batch_size):
+    def learn(self, batch):
         self.policy_net.train()
         self.target_net.eval()
 

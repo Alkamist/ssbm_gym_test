@@ -6,11 +6,13 @@ import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 
+
 def call_env_function(env_function, output, args):
     if args is None:
         output.append(env_function())
     else:
         output.append(env_function(args))
+
 
 def threaded_env_function_call(envs, function_name, function_args_list=None):
     output = []
@@ -28,6 +30,7 @@ def threaded_env_function_call(envs, function_name, function_args_list=None):
 
     return output
 
+
 class Rollout(object):
     def __init__(self, rollout_steps):
         self.rollout_steps = rollout_steps
@@ -39,6 +42,7 @@ class Rollout(object):
 
     def __len__(self):
         return self.rollout_steps
+
 
 class SynchronousMeleeActorPool(object):
     def __init__(self, pool_id, num_actors, rollout_steps, rollout_queue, seed, device, dolphin_options):
@@ -99,6 +103,7 @@ class SynchronousMeleeActorPool(object):
                         env.close()
                     self.rollout_queue.put(self.pool_id)
 
+
 class MeleeRolloutGenerator(object):
     def __init__(self, num_actor_pools, num_actors_per_pool, rollout_steps, seed, device, dolphin_options):
         self.num_actor_pools = num_actor_pools
@@ -152,8 +157,10 @@ class MeleeRolloutGenerator(object):
 
         return rollout
 
+
 from threading import Thread
 import functools
+
 
 def timeout(seconds_before_timeout):
     def deco(func):

@@ -21,15 +21,15 @@ if __name__ == "__main__":
     network.load("checkpoints/agent.pth")
     network.evaluate()
 
-    env = MeleeEnv(**melee_options)
+    env = MeleeEnv(worker_id=512, **melee_options)
     states = env.reset()
-    states = torch.tensor([states], dtype=torch.float32, device=device)
+    states = torch.tensor(states, dtype=torch.float32, device=device)
 
     with torch.no_grad():
         while True:
             actions = network.act(states, epsilon=0.0)
             states, rewards, _, _ = env.step(actions.squeeze())
-            states = torch.tensor([states], dtype=torch.float32, device=device)
+            states = torch.tensor(states, dtype=torch.float32, device=device)
 
             #if rewards[1] != 0.0:
-            #    print("Reward: %.4f" % rewards[1])
+            #    print("Reward: %.4f" % rewards[0])

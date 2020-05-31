@@ -22,6 +22,15 @@ class ReplayBuffer:
     def add(self, state, action, next_state, reward):
         self.memory.append(Transition(state, action, next_state, reward))
 
+#    def sample(self, batch_size):
+#        transitions = random.sample(self.memory, k=batch_size)
+#        batch = Transition(*zip(*transitions))
+#        state_batch = torch.cat(batch.state)
+#        action_batch = torch.cat(batch.action).unsqueeze(1)
+#        next_state_batch = torch.cat(batch.next_state)
+#        reward_batch = torch.cat(batch.reward)
+#        return Transition(state_batch, action_batch, next_state_batch, reward_batch)
+
     def sample(self, batch_size):
         transitions = random.sample(self.memory, k=batch_size)
         batch = Transition(*zip(*transitions))

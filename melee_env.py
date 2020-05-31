@@ -16,46 +16,46 @@ num_characters = 32
 
 
 NONE_stick = [
-    (0.5, 0.5), # Middle
-    (0.5, 0.0), # Down
-    (0.5, 1.0), # Up
-    (1.0, 0.5), # Right
-    (0.0, 0.5), # Left
+    #(0.5, 0.5), # Middle
+    #(0.5, 0.0), # Down
+    #(0.5, 1.0), # Up
+    #(1.0, 0.5), # Right
+    #(0.0, 0.5), # Left
     (0.35, 0.5), # Walk left
     (0.65, 0.5), # Walk right
 ]
 A_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down smash
-    (0.5, 1.0), # Up smash
-    (0.0, 0.5), # Left smash
-    (1.0, 0.5), # Right smash
-    (0.35, 0.5), # Left tilt
-    (0.65, 0.5), # Right tilt
-    (0.5, 0.35), # Down tilt
-    (0.5, 0.65), # Up tilt
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down smash
+    #(0.5, 1.0), # Up smash
+    #(0.0, 0.5), # Left smash
+    #(1.0, 0.5), # Right smash
+    #(0.35, 0.5), # Left tilt
+    #(0.65, 0.5), # Right tilt
+    #(0.5, 0.35), # Down tilt
+    #(0.5, 0.65), # Up tilt
 ]
 B_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down
-    (0.5, 1.0), # Up
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down
+    #(0.5, 1.0), # Up
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 Z_stick = [
-    (0.5, 0.5), # Neutral
+    #(0.5, 0.5), # Neutral
 ]
 Y_stick = [
-    (0.5, 0.5), # Neutral
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 L_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 1.0), # Up
-    (0.5, 0.0), # Down
-    (0.075, 0.25), # Wavedash left full
-    (0.925, 0.25), # Wavedash right full
+    #(0.5, 0.5), # Neutral
+    #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
+    #(0.075, 0.25), # Wavedash left full
+    #(0.925, 0.25), # Wavedash right full
 ]
 
 _controller = []
@@ -114,8 +114,10 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    num_actions = 30
-    observation_size = 852
+    #num_actions = 30
+    num_actions = 2
+    #observation_size = 856
+    observation_size = 8
 
     def __init__(self, seed=None, **dolphin_options):
         self.dolphin = DolphinAPI(**dolphin_options)
@@ -128,7 +130,7 @@ class MeleeEnv(object):
     def reset(self):
         self._previous_dolphin_state = None
         self._dolphin_state = self.dolphin.reset()
-        return [self._dolphin_state_to_numpy(self._dolphin_state, 0), self._dolphin_state_to_numpy(self._dolphin_state, 1)]
+        return [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
 
     def close(self):
         self.dolphin.close()
@@ -136,60 +138,76 @@ class MeleeEnv(object):
     def step(self, actions):
         self._dolphin_state = self.dolphin.step([_controller_states[actions[0]], _controller_states[actions[1]]])
 
-        observations = [self._dolphin_state_to_numpy(self._dolphin_state, 0), self._dolphin_state_to_numpy(self._dolphin_state, 1)]
-        rewards = [self._compute_rewards(0), self._compute_rewards(1)]
+        observations = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
+        rewards = [self._compute_reward(0), self._compute_reward(1)]
         dones = [False, False]
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
         return observations, rewards, dones, {}
 
-    def _player_state_to_numpy(self, state):
+    def _player_state_to_numpy(self, state, previous_state):
         return np.array([
-            *one_hot(state.character, num_characters),
-            *one_hot(state.action_state, num_melee_actions),
+            #*one_hot(state.character, num_characters),
+            #*one_hot(state.action_state, num_melee_actions),
             state.x / 100.0,
             state.y / 100.0,
-            state.action_frame / 30.0,
-            state.percent / 100.0,
-            state.facing,
-            1.0 if state.invulnerable else 0.0,
-            state.hitlag_frames_left / 30.0,
-            state.hitstun_frames_left / 30.0,
-            state.shield_size / 60.0,
-            1.0 if state.in_air else 0.0,
-            state.jumps_used,
+            (state.x - previous_state.x) if previous_state is not None else 0.0,
+            (state.y - previous_state.y) if previous_state is not None else 0.0,
+            #state.action_frame / 30.0,
+            #state.percent / 100.0,
+            #state.facing,
+            #1.0 if state.invulnerable else 0.0,
+            #state.hitlag_frames_left / 30.0,
+            #state.hitstun_frames_left / 30.0,
+            #state.shield_size / 60.0,
+            #1.0 if state.in_air else 0.0,
+            #state.jumps_used,
         ])
 
-    def _dolphin_state_to_numpy(self, state, player_perspective):
-        main_player = self._player_state_to_numpy(state.players[player_perspective])
-        other_player = self._player_state_to_numpy(state.players[1 - player_perspective])
+    def _dolphin_state_to_numpy(self, player_perspective):
+        state = self._dolphin_state
+        previous_state = self._previous_dolphin_state
+        if previous_state is not None:
+            main_player = self._player_state_to_numpy(state.players[player_perspective], previous_state.players[player_perspective])
+            other_player = self._player_state_to_numpy(state.players[1 - player_perspective], previous_state.players[1 - player_perspective])
+        else:
+            main_player = self._player_state_to_numpy(state.players[player_perspective], None)
+            other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
         return np.concatenate((main_player, other_player))
 
-    def _compute_rewards(self, player_perspective):
+    def _compute_reward(self, player_perspective):
         main_player = player_perspective
-        other_player = 1 - player_perspective
+        return 1.0 - (abs(self._dolphin_state.players[main_player].x - 15.0) * 0.02)
 
-        reward = 0.0
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        return 1.0 if abs(self._dolphin_state.players[main_player].x - 15.0) < 5.0 else 0.0
 
-        reward += 0.003 * self._percent_taken_by_player(other_player)
-        #reward -= 0.003 * self._percent_taken_by_player(main_player)
-
-        main_x = self._dolphin_state.players[main_player].x
-        other_x = self._dolphin_state.players[other_player].x
-        main_y = self._dolphin_state.players[main_player].y
-        other_y = self._dolphin_state.players[other_player].y
-        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
-
-        reward += 0.00005 * (20.0 - distance)
-
-        #if self._player_just_died(other_player):
-        #    reward = 1.0
-
-        if self._player_just_died(main_player):
-            reward = -1.0
-
-        return reward
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        other_player = 1 - player_perspective
+#
+#        reward = 0.0
+#
+#        reward += 0.003 * self._percent_taken_by_player(other_player)
+#        #reward -= 0.003 * self._percent_taken_by_player(main_player)
+#
+#        main_x = self._dolphin_state.players[main_player].x
+#        other_x = self._dolphin_state.players[other_player].x
+#        main_y = self._dolphin_state.players[main_player].y
+#        other_y = self._dolphin_state.players[other_player].y
+#        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+#
+#        reward += 0.00005 * (20.0 - distance)
+#
+#        #if self._player_just_died(other_player):
+#        #    reward = 1.0
+#
+#        if self._player_just_died(main_player):
+#            reward = -1.0
+#
+#        return reward
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:
