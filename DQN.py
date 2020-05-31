@@ -6,9 +6,9 @@ from torch.distributions import Categorical
 
 import random
 
-class Network(nn.Module):
+class Policy(nn.Module):
     def __init__(self, input_size, output_size, hidden_size=256):
-        super(Network, self).__init__()
+        super(Policy, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         #torch.nn.init.kaiming_uniform_(self.fc1.weight)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
@@ -28,8 +28,8 @@ class DQN():
         self.lr = lr
         self.gamma = gamma
         self.device = device
-        self.policy_net = Network(state_size, action_size).to(self.device)
-        self.target_net = Network(state_size, action_size).to(self.device)
+        self.policy_net = Policy(state_size, action_size).to(self.device)
+        self.target_net = Policy(state_size, action_size).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
         self.loss_criterion = torch.nn.SmoothL1Loss()
