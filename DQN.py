@@ -22,7 +22,7 @@ class Network(nn.Module):
         return self.fc3(x)
 
 class DQN():
-    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.997, target_update_frequency=10):
+    def __init__(self, state_size, action_size, device, lr=0.0001, gamma=0.99, target_update_frequency=1000):
         self.state_size = state_size
         self.action_size = action_size
         self.lr = lr

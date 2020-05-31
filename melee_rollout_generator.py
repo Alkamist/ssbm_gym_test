@@ -1,5 +1,6 @@
 import random
 import threading
+from copy import deepcopy
 
 import torch
 import torch.multiprocessing as mp
@@ -89,7 +90,7 @@ class SynchronousMeleeActorPool(object):
                                 rollouts[i].dones.append(dones[actor_id][player_id])
                                 i += 1
 
-                        states = next_states
+                        states = deepcopy(next_states)
 
                     for rollout in rollouts:
                         self.rollout_queue.put(rollout, block=True)
