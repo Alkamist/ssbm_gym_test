@@ -179,22 +179,22 @@ class MeleeEnv(object):
 #        main_player = player_perspective
 #        return 1.0 - (abs(self._dolphin_state.players[main_player].x - 15.0) * 0.02)
 
-#    def _compute_reward(self, player_perspective):
-#        return 1.0 if abs(self._dolphin_state.players[player_perspective].x - 15.0) < 5.0 else 0.0
-
     def _compute_reward(self, player_perspective):
-        main_player = player_perspective
-        other_player = 1 - player_perspective
+        return 1.0 if abs(self._dolphin_state.players[player_perspective].x - 5.0) < 5.0 else 0.0
 
-        reward = 0.0
-
-        if self._player_just_died(other_player):
-            reward = 1.0
-
-        if self._player_just_died(main_player):
-            reward = -1.0
-
-        return reward
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        other_player = 1 - player_perspective
+#
+#        reward = 0.0
+#
+#        if self._player_just_died(other_player):
+#            reward = 1.0
+#
+#        if self._player_just_died(main_player):
+#            reward = -1.0
+#
+#        return reward
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective

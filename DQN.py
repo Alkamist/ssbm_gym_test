@@ -81,21 +81,36 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, batch):
+    def learn(self, replay_buffer):
         self.policy_net.train()
         self.target_net.eval()
 
-        state_action_values = self.policy_net(batch.state).gather(1, batch.action)
-        next_state_values = self.target_net(batch.next_state).max(1)[0].detach()
+        batch, idxs, importance_sampling_weights = replay_buffer.sample()
 
-        expected_state_action_values = (next_state_values * self.gamma) + batch.reward
+        state_batch = torch.tensor(batch.state, dtype=torch.float32, device=self.device)
+        action_batch = torch.tensor(batch.action, dtype=torch.long, device=self.device).unsqueeze(1)
+        next_state_batch = torch.tensor(batch.next_state, dtype=torch.float32, device=self.device)
+        reward_batch = torch.tensor(batch.reward, dtype=torch.float32, device=self.device)
 
-        loss = self.loss_criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+        next_state_values = self.target_net(next_state_batch).max(1)[0].detach()
+
+        expected_state_action_values = (next_state_values * self.gamma) + reward_batch
+        expected_state_action_values = expected_state_action_values.unsqueeze(1)
+
+        errors = torch.abs(expected_state_action_values - state_action_values).detach().cpu().numpy()
+        for i in range(replay_buffer.batch_size):
+            replay_buffer.update_priority(idxs[i], errors[i])
 
         self.optimizer.zero_grad()
+
+        loss = (self.loss_criterion(state_action_values, expected_state_action_values) \
+              * torch.tensor([importance_sampling_weights], dtype=torch.float32, device=self.device)).mean()
         loss.backward()
+
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
+
         self.optimizer.step()
 
         # Update the target network.
