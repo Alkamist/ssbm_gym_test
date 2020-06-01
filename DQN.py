@@ -7,51 +7,46 @@ from torch.distributions import Categorical
 import random
 
 
-#class ResidualBlock(nn.Module):
-#    """ https://arxiv.org/abs/1806.10909 """
-#    def __init__(self, input_size, hidden_size):
-#        super(ResidualBlock, self).__init__()
-#        self.input_size = input_size
-#        self.hidden_size = hidden_size
-#        self.mlp = nn.Sequential(
-#            nn.Linear(self.input_size, self.hidden_size),
-#            nn.ReLU(True),
-#            nn.Linear(self.hidden_size, self.input_size),
-#            nn.ReLU(True),
-#        )
-#
-#    def forward(self, x):
-#        return x + self.mlp(x)
-#
-#
-#class Policy(nn.Module):
-#    def __init__(self, input_size, output_size, hidden_size=64):
-#        super(Policy, self).__init__()
-#        self.res1 = ResidualBlock(input_size, hidden_size)
-#        self.res2 = ResidualBlock(input_size, hidden_size)
-#        self.output = nn.Linear(input_size, output_size)
-#
-#    def forward(self, x):
-#        x = F.relu(self.res1(x))
-#        x = F.relu(self.res2(x))
-#        return self.output(x)
+class ResidualBlock(nn.Module):
+    """ https://arxiv.org/abs/1806.10909 """
+    def __init__(self, input_size, hidden_size):
+        super(ResidualBlock, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.mlp = nn.Sequential(
+            nn.Linear(self.input_size, self.hidden_size),
+            nn.ReLU(True),
+            nn.Linear(self.hidden_size, self.input_size),
+            nn.ReLU(True),
+        )
+
+    def forward(self, x):
+        return x + self.mlp(x)
 
 
 class Policy(nn.Module):
     def __init__(self, input_size, output_size, hidden_size=512):
         super(Policy, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        self.features = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            ResidualBlock(hidden_size, hidden_size),
+            nn.ReLU()
+        )
+
+        self.value = nn.Linear(hidden_size, 1)
+        self.advantage = nn.Linear(hidden_size, output_size)
+
+    def forward(self, state):
+        features = self.features(state)
+        values = self.value(features)
+        advantages = self.advantage(features)
+        return values + (advantages - advantages.mean())
 
 
 class DQN():
-    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.99, target_update_frequency=2500):
+    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.997, target_update_frequency=2500):
         self.state_size = state_size
         self.action_size = action_size
         self.lr = lr
