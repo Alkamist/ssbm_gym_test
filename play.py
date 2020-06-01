@@ -12,19 +12,11 @@ melee_options = dict(
     render=True,
     speed=1,
     player1='ai',
-    player2='ai',
+    player2='human',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
 )
-
-
-def select_actions(policy, states, epsilon):
-    with torch.no_grad():
-        if random.random() > epsilon:
-            return policy(states).max(1)[1]
-        else:
-            return torch.tensor([random.randrange(MeleeEnv.num_actions) for _ in range(2)], device=device, dtype=torch.long)
 
 
 if __name__ == "__main__":
@@ -36,11 +28,17 @@ if __name__ == "__main__":
     states = env.reset()
     states = torch.tensor(states, dtype=torch.float32, device=device)
 
+    frames = 0
     with torch.no_grad():
         while True:
-            actions = select_actions(policy, states, 0.0)
+            actions = policy(states).max(1)[1]
             states, rewards, _, _ = env.step(actions.squeeze().cpu().numpy())
             states = torch.tensor(states, dtype=torch.float32, device=device)
 
+            #if frames % 20 == 0:
+            #    print(states)
+
+            frames += 1
+
             if rewards[1] != 0.0:
-                print("Reward: %.4f" % rewards[0])
+                print("Reward: %.4f" % rewards[1])

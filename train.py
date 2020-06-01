@@ -5,6 +5,7 @@ import threading
 from copy import deepcopy
 
 import torch
+import torch.nn.functional as F
 import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
@@ -24,9 +25,9 @@ melee_options = dict(
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_workers = 8
-batch_size = 128
-learn_every = 64
+num_workers = 4
+batch_size = 64
+learn_every = 32
 save_every = 1000
 replay_buffer_size = 100000
 
@@ -35,12 +36,17 @@ epsilon_end = 1.0
 epsilon_decay = 10000
 
 
-def select_actions(policy, states, epsilon):
-    with torch.no_grad():
-        if random.random() > epsilon:
-            return policy(states).max(1)[1]
-        else:
-            return torch.tensor([random.randrange(MeleeEnv.num_actions) for _ in range(2)], device=device, dtype=torch.long)
+#def select_actions(policy, states, epsilon):
+#    with torch.no_grad():
+#        if random.random() > epsilon:
+#            return policy(states).max(1)[1]
+#        else:
+#            return torch.tensor([random.randrange(MeleeEnv.num_actions) for _ in range(2)], device=device, dtype=torch.long)
+
+
+#def select_actions(policy, states):
+#    with torch.no_grad():
+#        return torch.multinomial(policy(states), num_samples=1)
 
 
 def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
@@ -61,25 +67,25 @@ def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
 
             actions = [random.randrange(MeleeEnv.num_actions), random.randrange(MeleeEnv.num_actions)]
             #actions = select_actions(policy, states, epsilon.value)
+            #actions = select_actions(policy, states)
 
             step_env_with_timeout = timeout(5)(lambda : env.step(actions))
             next_states, rewards, _, _ = step_env_with_timeout()
 
-            #next_states = torch.tensor(next_states, dtype=torch.float32, device=device)
-
             for player_id in range(2):
                 frame_queue.put((states[player_id],
-                                 actions[player_id],
-                                 next_states[player_id],
-                                 rewards[player_id]))
+                                actions[player_id],
+                                next_states[player_id],
+                                rewards[player_id]))
 
 #            for player_id in range(2):
 #                frame_queue.put((states[player_id].cpu().numpy(),
 #                                 actions[player_id].item(),
-#                                 next_states[player_id].cpu().numpy(),
+#                                 next_states[player_id],
 #                                 rewards[player_id]))
 
             states = deepcopy(next_states)
+            #states = torch.tensor(states, dtype=torch.float32, device=device)
 
         except KeyboardInterrupt:
             env.close()
