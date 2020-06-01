@@ -174,38 +174,38 @@ class MeleeEnv(object):
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
         return np.concatenate((main_player, other_player))
 
-    def _compute_reward(self, player_perspective):
-        main_player = player_perspective
-        return 1.0 - (abs(self._dolphin_state.players[main_player].x - 15.0) * 0.02)
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        return 1.0 - (abs(self._dolphin_state.players[main_player].x - 15.0) * 0.02)
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective
 #        return 1.0 if abs(self._dolphin_state.players[main_player].x - 15.0) < 5.0 else 0.0
 
-#    def _compute_reward(self, player_perspective):
-#        main_player = player_perspective
-#        other_player = 1 - player_perspective
-#
-#        reward = 0.0
-#
-#        reward += 0.003 * self._percent_taken_by_player(other_player)
-#        #reward -= 0.003 * self._percent_taken_by_player(main_player)
-#
-#        main_x = self._dolphin_state.players[main_player].x
-#        other_x = self._dolphin_state.players[other_player].x
-#        main_y = self._dolphin_state.players[main_player].y
-#        other_y = self._dolphin_state.players[other_player].y
-#        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
-#
-#        reward += 0.00005 * (20.0 - distance)
-#
-#        #if self._player_just_died(other_player):
-#        #    reward = 1.0
-#
-#        if self._player_just_died(main_player):
-#            reward = -1.0
-#
-#        return reward
+    def _compute_reward(self, player_perspective):
+        main_player = player_perspective
+        other_player = 1 - player_perspective
+
+        reward = 0.0
+
+        reward += 0.01 * self._percent_taken_by_player(other_player)
+        #reward -= 0.01 * self._percent_taken_by_player(main_player)
+
+        main_x = self._dolphin_state.players[main_player].x
+        other_x = self._dolphin_state.players[other_player].x
+        main_y = self._dolphin_state.players[main_player].y
+        other_y = self._dolphin_state.players[other_player].y
+        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+
+        reward += 0.0005 * (20.0 - distance)
+
+        #if self._player_just_died(other_player):
+        #    reward = 1.0
+
+        if self._player_just_died(main_player):
+            reward = -1.0
+
+        return reward
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:

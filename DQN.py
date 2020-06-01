@@ -7,7 +7,7 @@ from torch.distributions import Categorical
 import random
 
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=256):
+    def __init__(self, input_size, output_size, hidden_size=512):
         super(Policy, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         #torch.nn.init.kaiming_uniform_(self.fc1.weight)
@@ -22,7 +22,7 @@ class Policy(nn.Module):
         return self.fc3(x)
 
 class DQN():
-    def __init__(self, state_size, action_size, device, lr=0.0001, gamma=0.99, target_update_frequency=1000):
+    def __init__(self, state_size, action_size, device, lr=3e-5, gamma=0.99, target_update_frequency=1000):
         self.state_size = state_size
         self.action_size = action_size
         self.lr = lr
