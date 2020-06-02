@@ -1,28 +1,89 @@
 import random
-import pickle
-from collections import namedtuple, deque
+from collections import namedtuple
+
+import numpy as np
+
+from segment_tree import SumSegmentTree, MinSegmentTree
 
 
-Transition = namedtuple("Transition", field_names=["state", "action", "next_state", "reward"])
+Transition = namedtuple("Transition", field_names=["state", "action", "reward", "next_state", "done"])
 
 
-class ReplayBuffer:
-    def __init__(self, buffer_size, batch_size):
-        self.memory = deque(maxlen=buffer_size)
-        self.batch_size = batch_size
+class ReplayBuffer(object):
+    def __init__(self, max_size):
+        self.storage = []
+        self.max_size = max_size
+        self.next_index = 0
 
-    def add(self, state, action, next_state, reward):
-        self.memory.append(Transition(state, action, next_state, reward))
+    def __len__(self) -> int:
+        return len(self.storage)
 
-    def sample(self):
-        transitions = random.sample(self.memory, k=self.batch_size)
-        return Transition(*zip(*transitions))
+    def add(self, state, action, reward, next_state, done):
+        data = Transition(state, action, reward, next_state, done)
 
-    def save(self, file_path):
-        pickle.dump(self.memory, open(file_path, "wb"))
+        if self.next_index >= len(self.storage):
+            self.storage.append(data)
+        else:
+            self.storage[self.next_index] = data
 
-    def load(self, file_path):
-        self.memory = pickle.load(open(file_path, "rb"))
+        self.next_index = (self.next_index + 1) % self.max_size
 
-    def __len__(self):
-        return len(self.memory)
+    def _encode_sample(self, indices):
+        states, actions, rewards, next_states, dones = [], [], [], [], []
+
+        for i in indices:
+            data = self.storage[i]
+            state, action, reward, next_state, done = data
+            states.append(np.array(state, copy=False))
+            actions.append(action)
+            rewards.append(reward)
+            next_states.append(np.array(next_state, copy=False))
+            dones.append(done)
+
+        return Transition(np.array(states), np.array(actions), np.array(rewards), np.array(next_states), np.array(dones))
+
+    def sample(self, batch_size):
+        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
+        return self._encode_sample(indices)
+
+
+class PrioritizedReplayBuffer(ReplayBuffer):
+    def __init__(self, max_size, alpha=0.6, beta=0.4):
+        super(PrioritizedReplayBuffer, self).__init__(max_size)
+        self.alpha = alpha
+        self.beta = beta
+        self.epsilon = 0.01
+        self.max_priority = 1.0
+
+        tree_capacity = 1
+        while tree_capacity < max_size:
+            tree_capacity *= 2
+
+        self._tree_sum = SumSegmentTree(tree_capacity)
+        self._tree_min = MinSegmentTree(tree_capacity)
+
+    def add(self, state, action, reward, next_state, done):
+        idx = self.next_index
+        super().add(state, action, reward, next_state, done)
+        priority = self.max_priority ** self.alpha
+        self._tree_sum[idx] = priority
+        self._tree_min[idx] = priority
+
+    def sample(self, batch_size):
+        mass = []
+        weights = []
+        total = self._tree_sum.sum(0, len(self.storage) - 1)
+        mass = np.random.random(size=batch_size) * total
+        indices = self._tree_sum.find_prefixsum_idx(mass)
+        p_min = self._tree_min.min() / self._tree_sum.sum()
+        max_weight = (p_min * len(self.storage)) ** (-self.beta)
+        p_sample = self._tree_sum[indices] / self._tree_sum.sum()
+        weights = (p_sample * len(self.storage)) ** (-self.beta) / max_weight
+        encoded_sample = self._encode_sample(indices)
+        return encoded_sample, indices, weights
+
+    def update_priorities(self, indices, absolute_errors):
+        priorities = (absolute_errors + self.epsilon) ** self.alpha
+        self._tree_sum[indices] = priorities
+        self._tree_min[indices] = priorities
+        self.max_priority = max(self.max_priority, np.max(priorities))
