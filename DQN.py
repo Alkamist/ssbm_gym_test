@@ -1,9 +1,61 @@
+import math
 import random
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.autograd import Variable
 import torch.nn.functional as F
+
+
+class NoisyLinear(nn.Module):
+    def __init__(self, input_size, output_size, std_init=0.4):
+        super(NoisyLinear, self).__init__()
+        self.input_size  = input_size
+        self.output_size = output_size
+        self.std_init = std_init
+
+        self.weight_mu = nn.Parameter(torch.FloatTensor(output_size, input_size))
+        self.weight_sigma = nn.Parameter(torch.FloatTensor(output_size, input_size))
+        self.register_buffer('weight_epsilon', torch.FloatTensor(output_size, input_size))
+
+        self.bias_mu = nn.Parameter(torch.FloatTensor(output_size))
+        self.bias_sigma = nn.Parameter(torch.FloatTensor(output_size))
+        self.register_buffer('bias_epsilon', torch.FloatTensor(output_size))
+
+        self.reset_parameters()
+        self.reset_noise()
+
+    def forward(self, x):
+        if self.training:
+            weight = self.weight_mu + self.weight_sigma.mul(Variable(self.weight_epsilon))
+            bias = self.bias_mu + self.bias_sigma.mul(Variable(self.bias_epsilon))
+        else:
+            weight = self.weight_mu
+            bias = self.bias_mu
+
+        return F.linear(x, weight, bias)
+
+    def reset_parameters(self):
+        mu_range = 1 / math.sqrt(self.weight_mu.size(1))
+
+        self.weight_mu.data.uniform_(-mu_range, mu_range)
+        self.weight_sigma.data.fill_(self.std_init / math.sqrt(self.weight_sigma.size(1)))
+
+        self.bias_mu.data.uniform_(-mu_range, mu_range)
+        self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.bias_sigma.size(0)))
+
+    def reset_noise(self):
+        epsilon_in  = self._scale_noise(self.input_size)
+        epsilon_out = self._scale_noise(self.output_size)
+
+        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
+        self.bias_epsilon.copy_(self._scale_noise(self.output_size))
+
+    def _scale_noise(self, size):
+        x = torch.randn(size)
+        x = x.sign().mul(x.abs().sqrt())
+        return x
 
 
 class ResidualBlock(nn.Module):
@@ -35,13 +87,13 @@ class Policy(nn.Module):
         self.value = nn.Sequential(
             ResidualBlock(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, 1),
+            NoisyLinear(hidden_size, 1),
         )
 
         self.advantage = nn.Sequential(
             ResidualBlock(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, output_size),
+            NoisyLinear(hidden_size, output_size),
         )
 
     def forward(self, state):
@@ -49,6 +101,12 @@ class Policy(nn.Module):
         values = self.value(features)
         advantages = self.advantage(features)
         return values + (advantages - advantages.mean())
+
+    def reset_noise(self):
+        #self.value[0].reset_noise()
+        self.value[2].reset_noise()
+        #self.advantage[0].reset_noise()
+        self.advantage[2].reset_noise()
 
 
 class DQN():
@@ -70,10 +128,12 @@ class DQN():
 
     def act(self, state, epsilon=0.0):
         with torch.no_grad():
-            if random.random() > epsilon:
-                return self.policy_net(state).max(1)[1]
-            else:
-                return torch.tensor([random.randrange(self.action_size) for _ in range(self.num_ai_players)], device=self.device, dtype=torch.long)
+            return self.policy_net(state).max(1)[1]
+        #with torch.no_grad():
+        #    if random.random() > epsilon:
+        #        return self.policy_net(state).max(1)[1]
+        #    else:
+        #        return torch.tensor([random.randrange(self.action_size) for _ in range(self.num_ai_players)], device=self.device, dtype=torch.long)
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
@@ -121,6 +181,9 @@ class DQN():
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
+
+        self.policy_net.reset_noise()
+        self.target_net.reset_noise()
 
         # Update the target network.
         if self.learn_iterations % self.target_update_frequency == 0:
