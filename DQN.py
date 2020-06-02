@@ -25,24 +25,68 @@ class ResidualBlock(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=512):
+    def __init__(self, input_size, output_size, hidden_size=32):
         super(Policy, self).__init__()
 
         self.features = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-            ResidualBlock(hidden_size, hidden_size),
-            nn.ReLU()
         )
 
-        self.value = nn.Linear(hidden_size, 1)
-        self.advantage = nn.Linear(hidden_size, output_size)
+        self.value = nn.Sequential(
+            ResidualBlock(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+
+        self.advantage = nn.Sequential(
+            ResidualBlock(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+        )
 
     def forward(self, state):
         features = self.features(state)
         values = self.value(features)
         advantages = self.advantage(features)
         return values + (advantages - advantages.mean())
+
+
+#class Policy(nn.Module):
+#    def __init__(self, input_size, output_size, hidden_size=32):
+#        super(Policy, self).__init__()
+#
+#        self.features = nn.Sequential(
+#            nn.Linear(input_size, hidden_size),
+#            nn.ReLU(),
+#            nn.Linear(hidden_size, hidden_size),
+#            nn.ReLU(),
+#        )
+#
+#        self.value = nn.Linear(hidden_size, 1)
+#        self.advantage = nn.Linear(hidden_size, output_size)
+#
+#    def forward(self, state):
+#        features = self.features(state)
+#        values = self.value(features)
+#        advantages = self.advantage(features)
+#        return values + (advantages - advantages.mean())
+
+
+#class Policy(nn.Module):
+#    def __init__(self, input_size, output_size, hidden_size=32):
+#        super(Policy, self).__init__()
+#
+#        self.x = nn.Sequential(
+#            nn.Linear(input_size, hidden_size),
+#            nn.ReLU(),
+#            nn.Linear(hidden_size, hidden_size),
+#            nn.ReLU(),
+#            nn.Linear(hidden_size, output_size)
+#        )
+#
+#    def forward(self, state):
+#        return self.x(state)
 
 
 class DQN():
@@ -55,18 +99,18 @@ class DQN():
         self.policy_net = Policy(state_size, action_size).to(self.device)
         self.target_net = Policy(state_size, action_size).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.loss_criterion = torch.nn.SmoothL1Loss()
         self.target_update_frequency = target_update_frequency
         self.learn_iterations = 0
         self.num_ai_players = 2
 
-    def act(self, state, epsilon=0.0):
-        with torch.no_grad():
-            if random.random() > epsilon:
-                return self.policy_net(state).max(1)[1]
-            else:
-                return torch.tensor([random.randrange(self.action_size) for _ in range(self.num_ai_players)], device=self.device, dtype=torch.long)
+#    def act(self, state, epsilon=0.0):
+#        with torch.no_grad():
+#            if random.random() > epsilon:
+#                return self.policy_net(state).max(1)[1]
+#            else:
+#                return torch.tensor([random.randrange(self.action_size) for _ in range(self.num_ai_players)], device=self.device, dtype=torch.long)
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
@@ -85,32 +129,32 @@ class DQN():
         self.policy_net.train()
         self.target_net.eval()
 
-        batch, idxs, importance_sampling_weights = replay_buffer.sample()
+        #batch, indices, weights = replay_buffer.sample()
+        batch = replay_buffer.sample()
 
         state_batch = torch.tensor(batch.state, dtype=torch.float32, device=self.device)
         action_batch = torch.tensor(batch.action, dtype=torch.long, device=self.device).unsqueeze(1)
         next_state_batch = torch.tensor(batch.next_state, dtype=torch.float32, device=self.device)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32, device=self.device)
 
-        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch).squeeze(1)
         next_state_values = self.target_net(next_state_batch).max(1)[0].detach()
 
-        expected_state_action_values = (next_state_values * self.gamma) + reward_batch
-        expected_state_action_values = expected_state_action_values.unsqueeze(1)
+        expected_state_action_values = ((next_state_values * self.gamma) + reward_batch)
 
-        errors = torch.abs(expected_state_action_values - state_action_values).detach().cpu().numpy()
-        for i in range(replay_buffer.batch_size):
-            replay_buffer.update_priority(idxs[i], errors[i])
+        #weights = torch.tensor(weights, dtype=torch.float32, device=self.device)
+        #loss = (self.loss_criterion(state_action_values, expected_state_action_values) * weights).mean()
+
+        loss = self.loss_criterion(state_action_values, expected_state_action_values)
+
+        #errors = torch.abs(state_action_values - expected_state_action_values).detach().cpu().numpy()
+        #for i in range(replay_buffer.batch_size):
+        #    replay_buffer.update_priority(indices[i], errors[i])
 
         self.optimizer.zero_grad()
-
-        loss = (self.loss_criterion(state_action_values, expected_state_action_values) \
-              * torch.tensor([importance_sampling_weights], dtype=torch.float32, device=self.device)).mean()
         loss.backward()
-
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
-
         self.optimizer.step()
 
         # Update the target network.

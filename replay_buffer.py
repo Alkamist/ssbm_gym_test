@@ -7,15 +7,15 @@ Transition = namedtuple("Transition", field_names=["state", "action", "next_stat
 
 
 class ReplayBuffer:
-    def __init__(self, buffer_size, device):
+    def __init__(self, buffer_size, batch_size):
         self.memory = deque(maxlen=buffer_size)
-        self.device = device
+        self.batch_size = batch_size
 
     def add(self, state, action, next_state, reward):
         self.memory.append(Transition(state, action, next_state, reward))
 
-    def sample(self, batch_size):
-        transitions = random.sample(self.memory, k=batch_size)
+    def sample(self):
+        transitions = random.sample(self.memory, k=self.batch_size)
         return Transition(*zip(*transitions))
 
     def save(self, file_path):

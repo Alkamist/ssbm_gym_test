@@ -1,67 +1,55 @@
 import random
 import numpy as np
-from sumtree import SumTree
-from collections import namedtuple, deque
+from collections import namedtuple
 
 
 Transition = namedtuple("Transition", field_names=["state", "action", "next_state", "reward"])
 
 
-class PrioritizedReplayBuffer:
-    def __init__(self, capacity, batch_size, epsilon=0.01, alpha=0.6, beta=1.0):
-        self.epsilon = epsilon
-        self.alpha = alpha
-        self.beta = beta
-        self.tree = SumTree(capacity)
-        self.capacity = capacity
+class PrioritizedReplayBuffer(object):
+    def __init__(self, capacity, batch_size):
+        self.alpha = 0.6
+        self.beta = 1.0
         self.batch_size = batch_size
-        #self.beta_increment_per_sampling = 0.001
-        self.length = 0
+        self.capacity = capacity
+        self.buffer = []
+        self.write_position = 0
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
 
-    def __len__(self):
-        return self.length
+    def add(self, state, action, next_state, reward):
+        max_priority = self.priorities.max() if self.buffer else 1.0
+        self.priorities[self.write_position] = max_priority
 
-    def _get_priority(self, error):
-        return (np.abs(error) + self.epsilon) ** self.alpha
-
-    def get_average_priority(self):
-        if self.length > 0:
-            return self.tree.total() / self.length
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(Transition(state, action, next_state, reward))
         else:
-            return self.epsilon
+            self.buffer[self.write_position] = Transition(state, action, next_state, reward)
 
-    def add_by_priority(self, priority, state, action, next_state, reward):
-        self.tree.add(priority, Transition(state, action, next_state, reward))
-        self.length = min(self.length + 1, self.capacity)
-
-#    def add(self, error, state, action, next_state, reward):
-#        p = self._get_priority(error)
-#        self.tree.add(p, Transition(state, action, next_state, reward))
-#        self.length = min(self.length + 1, self.capacity)
+        self.write_position = (self.write_position + 1) % self.capacity
 
     def sample(self):
-        batch = []
-        idxs = []
-        segment = self.tree.total() / self.batch_size
-        priorities = []
+        buffer_length = len(self.buffer)
 
-        #self.beta = np.min([1.0, self.beta + self.beta_increment_per_sampling])
+        if buffer_length == self.capacity:
+            priorities = self.priorities
+        else:
+            priorities = self.priorities[:self.write_position]
 
-        for i in range(self.batch_size):
-            a = segment * i
-            b = segment * (i + 1)
-            s = random.uniform(a, b)
-            (idx, p, data) = self.tree.get(s)
-            priorities.append(p)
-            batch.append(data)
-            idxs.append(idx)
+        probabilities = priorities ** self.alpha
+        probabilities /= probabilities.sum()
 
-        sampling_probabilities = priorities / self.tree.total()
-        importance_sampling_weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
-        importance_sampling_weights /= importance_sampling_weights.max()
+        indices = np.random.choice(buffer_length, self.batch_size, p=probabilities)
+        samples = [self.buffer[idx] for idx in indices]
 
-        return Transition(*zip(*batch)), idxs, importance_sampling_weights
+        total = buffer_length
+        weights = (total * probabilities[indices]) ** (-self.beta)
+        weights /= weights.max()
+        weights = np.array(weights, dtype=np.float32)
+
+        return Transition(*zip(*samples)), indices, weights
 
     def update_priority(self, idx, error):
-        p = self._get_priority(error)
-        self.tree.update(idx, p)
+        self.priorities[idx] = (error + 0.01) ** self.alpha
+
+    def __len__(self):
+        return len(self.buffer)

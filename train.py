@@ -1,15 +1,19 @@
 import time
 import math
+import queue
 import random
 import threading
 from copy import deepcopy
+#from collections import deque
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
-from prioritized_replay_buffer import PrioritizedReplayBuffer
+from replay_buffer import ReplayBuffer
+#from prioritized_replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
 from DQN import DQN, Policy
 from timeout import timeout
 
@@ -25,53 +29,55 @@ melee_options = dict(
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_workers = 2
+num_workers = 3
 batch_size = 64
-learn_every = 32
-save_every = 1000
-replay_buffer_size = 100000
+learn_every = 8
+save_every = 8000
+replay_buffer_size = 250000
 
 epsilon_start = 1.0
 epsilon_end = 1.0
 epsilon_decay = 10000
 
 
-def test_policy(shared_state_dict, pipe):
-    testing_steps = 1200
+def test_policy(shared_state_dict, info_queue):
+    reward_buffer = []
 
     policy = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions).to(device)
 
-    while True:
-        should_test = pipe.recv()
-        if should_test:
-            policy.load_state_dict(shared_state_dict.state_dict())
+    testing_options = deepcopy(melee_options)
+    testing_options["render"] = True
+    env = MeleeEnv(worker_id=1024, **testing_options)
+    states = env.reset()
+    states = torch.tensor(states, dtype=torch.float32, device=device)
 
-            env = MeleeEnv(worker_id=1024, **melee_options)
-
-            states = env.reset()
-            states = torch.tensor(states, dtype=torch.float32, device=device)
-
-            total_rewards = 0.0
-
-            for _ in range(testing_steps):
+    with torch.no_grad():
+        while True:
+            try:
                 try:
-                    actions = policy(states).max(1)[1]
+                    test_signal = info_queue.get(block=False)
+                    if test_signal:
+                        print("Average Reward: %.4f" % np.mean(reward_buffer))
+                        policy.load_state_dict(shared_state_dict.state_dict())
+                        reward_buffer = []
+                except queue.Empty:
+                    test_signal = False
 
-                    step_env_with_timeout = timeout(5)(lambda : env.step(actions))
-                    states, rewards, _, _ = step_env_with_timeout()
-                    states = torch.tensor(states, dtype=torch.float32, device=device)
+                actions = policy(states).max(1)[1]
+                step_env_with_timeout = timeout(5)(lambda : env.step(actions))
+                states, rewards, _, _ = step_env_with_timeout()
+                states = torch.tensor(states, dtype=torch.float32, device=device)
 
-                    total_rewards += rewards[0]
+                reward_buffer.append(rewards[0])
 
-                except KeyboardInterrupt:
-                    env.close()
+            except KeyboardInterrupt:
+                env.close()
 
-                except:
-                    env.close()
-                    print("The test crashed.")
-
-            env.close()
-            print("Average Reward: %.4f" % (total_rewards / testing_steps))
+            except:
+                print("The testing dolphin instance crashed.")
+                states = env.reset()
+                states = torch.tensor(states, dtype=torch.float32, device=device)
+                return
 
 
 def generate_frames(worker_id, frame_queue):
@@ -111,7 +117,7 @@ def add_frames_to_replay_buffer(info_flags, replay_buffer, frame_queue):
 
             if isinstance(frame, tuple):
                 state, action, next_state, reward = frame
-                replay_buffer.add_by_priority(replay_buffer.get_average_priority(), state, action, next_state, reward)
+                replay_buffer.add(state, action, next_state, reward)
             else:
                 info_flags["dolphin_crashed"] = frame
 
@@ -128,14 +134,14 @@ def create_worker(worker_id, frame_queue):
 
 
 if __name__ == "__main__":
-    network = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, device)
+    network = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, device, lr=0.0001)
     #network.load("checkpoints/agent.pth")
 
     shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions)
     shared_state_dict.load_state_dict(network.policy_net.state_dict())
     shared_state_dict.share_memory()
 
-    replay_buffer = PrioritizedReplayBuffer(replay_buffer_size, batch_size)
+    replay_buffer = ReplayBuffer(replay_buffer_size, batch_size)
 
     frame_queue = mp.Queue()
 
@@ -157,12 +163,12 @@ if __name__ == "__main__":
     replay_buffer_frame_thread.start()
 
     # Start the testing process asynchronously so it doesn't slow down learning.
-    #testing_parent_pipe, testing_child_pipe = mp.Pipe()
-    #testing_thread = threading.Thread(
-    #    target=test_policy,
-    #    args=(network.policy_net, testing_child_pipe)
-    #)
-    #testing_thread.start()
+    testing_queue = mp.Queue()
+    testing_process = mp.Process(
+        target=test_policy,
+        args=(shared_state_dict, testing_queue)
+    )
+    testing_process.start()
 
     need_to_save = False
     learn_iterations = 0
@@ -183,17 +189,19 @@ if __name__ == "__main__":
             info_flags["learns_allowed"] -= 1
             need_to_save = True
 
-        # Save every X learn iterations and perform a test.
+        if learn_iterations % 1000 == 0 and learn_iterations > 0 and need_to_save:
+            testing_queue.put(True)
+
+        # Save every X learn iterations.
         if learn_iterations % save_every == 0 and learn_iterations > 0 and need_to_save:
-            network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
+            #network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
             need_to_save = False
             print("Total Frames: {} / Learn Iterations: {}".format(
                 info_flags["frames_generated"],
                 learn_iterations,
             ))
-            #testing_parent_pipe.send(True)
 
-    #testing_thread.join()
+    testing_process.join()
     replay_buffer_frame_thread.join()
     for p in generator_processes:
         p.join()
