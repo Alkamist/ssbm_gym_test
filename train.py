@@ -48,48 +48,49 @@ if __name__ == "__main__":
 
     env = MeleeEnv(**melee_options)
     states = env.reset()
-    states = torch.tensor(states, dtype=torch.float32, device=device)
 
     epsilon = epsilon_start
     learn_iterations = 0
     while True:
-        try:
-            with torch.no_grad():
-                for _ in range(learn_every):
-                    actions = network.act(states, epsilon=epsilon)
-                    step_env_with_timeout = timeout(5)(lambda : env.step(actions))
-                    next_states, rewards, dones, _ = step_env_with_timeout()
+#        try:
+        with torch.no_grad():
+            for _ in range(learn_every):
+                actions = []
+                for player_id in range(2):
+                    state = torch.tensor(states[player_id], dtype=torch.float32, device=device).unsqueeze(0)
+                    actions.append(network.act(state, epsilon=epsilon))
 
-                    for player_id in range(2):
-                        replay_buffer.add(states[player_id].cpu().numpy(),
-                                          actions[player_id].item(),
-                                          rewards[player_id],
-                                          next_states[player_id],
-                                          dones[player_id])
+                step_env_with_timeout = timeout(5)(lambda : env.step(actions))
+                next_states, rewards, dones, _ = step_env_with_timeout()
 
-                    reward_buffer.append(rewards[0])
+                for player_id in range(2):
+                    replay_buffer.add(states[player_id],
+                                        actions[player_id],
+                                        rewards[player_id],
+                                        next_states[player_id],
+                                        dones[player_id])
 
-                    states = deepcopy(next_states)
-                    states = torch.tensor(states, dtype=torch.float32, device=device)
+                reward_buffer.append(rewards[0])
 
-            epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learn_iterations / epsilon_decay)
+                states = deepcopy(next_states)
 
-            learn_iterations += 1
-            network.learn(replay_buffer)
+        epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learn_iterations / epsilon_decay)
 
-            if learn_iterations % save_every == 0:
-                #network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
-                print("Total Frames: {} / Learn Iterations: {} / Average Reward: {:.4f} / Epsilon: {:.2f}".format(
-                    learn_iterations * learn_every * 2,
-                    learn_iterations,
-                    np.mean(reward_buffer),
-                    epsilon
-                ))
-                reward_buffer = []
+        learn_iterations += 1
+        network.learn(replay_buffer)
 
-        except KeyboardInterrupt:
-            env.close()
+        if learn_iterations % save_every == 0:
+            #network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
+            print("Total Frames: {} / Learn Iterations: {} / Average Reward: {:.4f} / Epsilon: {:.2f}".format(
+                learn_iterations * learn_every * 2,
+                learn_iterations,
+                np.mean(reward_buffer),
+                epsilon
+            ))
+            reward_buffer = []
 
-        except:
-            states = env.reset()
-            states = torch.tensor(states, dtype=torch.float32, device=device)
+#        except KeyboardInterrupt:
+#            env.close()
+#
+#        except:
+#            states = env.reset()
