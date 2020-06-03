@@ -21,41 +21,41 @@ NONE_stick = [
     (0.5, 1.0), # Up
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    (0.35, 0.5), # Walk left
-    (0.65, 0.5), # Walk right
+    #(0.35, 0.5), # Walk left
+    #(0.65, 0.5), # Walk right
 ]
 A_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down smash
-    (0.5, 1.0), # Up smash
-    (0.0, 0.5), # Left smash
-    (1.0, 0.5), # Right smash
-    (0.35, 0.5), # Left tilt
-    (0.65, 0.5), # Right tilt
-    (0.5, 0.35), # Down tilt
-    (0.5, 0.65), # Up tilt
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down smash
+    #(0.5, 1.0), # Up smash
+    #(0.0, 0.5), # Left smash
+    #(1.0, 0.5), # Right smash
+    #(0.35, 0.5), # Left tilt
+    #(0.65, 0.5), # Right tilt
+    #(0.5, 0.35), # Down tilt
+    #(0.5, 0.65), # Up tilt
 ]
 B_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down
-    (0.5, 1.0), # Up
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.5, 0.0), # Down
+    #(0.5, 1.0), # Up
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 Z_stick = [
-    (0.5, 0.5), # Neutral
+    #(0.5, 0.5), # Neutral
 ]
 Y_stick = [
-    (0.5, 0.5), # Neutral
-    (0.0, 0.5), # Left
-    (1.0, 0.5), # Right
+    #(0.5, 0.5), # Neutral
+    #(0.0, 0.5), # Left
+    #(1.0, 0.5), # Right
 ]
 L_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 1.0), # Up
-    (0.5, 0.0), # Down
-    (0.075, 0.25), # Wavedash left full
-    (0.925, 0.25), # Wavedash right full
+    #(0.5, 0.5), # Neutral
+    #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
+    #(0.075, 0.25), # Wavedash left full
+    #(0.925, 0.25), # Wavedash right full
 ]
 
 _controller = []
@@ -114,8 +114,9 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    num_actions = 30
+    #num_actions = 30
     #observation_size = 856
+    num_actions = 5
     observation_size = 792
 
     def __init__(self, seed=None, **dolphin_options):

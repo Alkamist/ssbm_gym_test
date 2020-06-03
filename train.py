@@ -13,7 +13,6 @@ import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
-#from prioritized_replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
 from DQN import DQN, Policy
 from timeout import timeout
 
@@ -31,7 +30,7 @@ melee_options = dict(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size = 64
 learn_every = 8
-save_every = 1000
+save_every = 200
 replay_buffer_size = 250000
 
 epsilon_start = 1.0
@@ -63,10 +62,10 @@ if __name__ == "__main__":
 
                     for player_id in range(2):
                         replay_buffer.add(states[player_id].cpu().numpy(),
-                                        actions[player_id].item(),
-                                        rewards[player_id],
-                                        next_states[player_id],
-                                        dones[player_id])
+                                          actions[player_id].item(),
+                                          rewards[player_id],
+                                          next_states[player_id],
+                                          dones[player_id])
 
                     reward_buffer.append(rewards[0])
 
@@ -79,7 +78,7 @@ if __name__ == "__main__":
             network.learn(replay_buffer)
 
             if learn_iterations % save_every == 0:
-                network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
+                #network.save("checkpoints/agent" + str(learn_iterations) + ".pth")
                 print("Total Frames: {} / Learn Iterations: {} / Average Reward: {:.4f} / Epsilon: {:.2f}".format(
                     learn_iterations * learn_every * 2,
                     learn_iterations,

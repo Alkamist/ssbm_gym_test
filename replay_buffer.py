@@ -34,13 +34,13 @@ class ReplayBuffer(object):
         for i in indices:
             data = self.storage[i]
             state, action, reward, next_state, done = data
-            states.append(np.array(state, copy=False))
+            states.append(state)
             actions.append(action)
             rewards.append(reward)
-            next_states.append(np.array(next_state, copy=False))
+            next_states.append(next_state)
             dones.append(done)
 
-        return Transition(np.array(states), np.array(actions), np.array(rewards), np.array(next_states), np.array(dones))
+        return Transition(states, actions, rewards, next_states, dones)
 
     def sample(self, batch_size):
         indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
@@ -48,7 +48,7 @@ class ReplayBuffer(object):
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, max_size, alpha=0.6, beta=0.4):
+    def __init__(self, max_size, alpha=0.9, beta=01.0):
         super(PrioritizedReplayBuffer, self).__init__(max_size)
         self.alpha = alpha
         self.beta = beta
