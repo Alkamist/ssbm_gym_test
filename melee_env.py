@@ -21,41 +21,41 @@ NONE_stick = [
     (0.5, 1.0), # Up
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    #(0.35, 0.5), # Walk left
-    #(0.65, 0.5), # Walk right
+    (0.35, 0.5), # Walk left
+    (0.65, 0.5), # Walk right
 ]
 A_stick = [
-    #(0.5, 0.5), # Neutral
-    #(0.5, 0.0), # Down smash
-    #(0.5, 1.0), # Up smash
-    #(0.0, 0.5), # Left smash
-    #(1.0, 0.5), # Right smash
-    #(0.35, 0.5), # Left tilt
-    #(0.65, 0.5), # Right tilt
-    #(0.5, 0.35), # Down tilt
-    #(0.5, 0.65), # Up tilt
+    (0.5, 0.5), # Neutral
+    (0.5, 0.0), # Down smash
+    (0.5, 1.0), # Up smash
+    (0.0, 0.5), # Left smash
+    (1.0, 0.5), # Right smash
+    (0.35, 0.5), # Left tilt
+    (0.65, 0.5), # Right tilt
+    (0.5, 0.35), # Down tilt
+    (0.5, 0.65), # Up tilt
 ]
 B_stick = [
-    #(0.5, 0.5), # Neutral
-    #(0.5, 0.0), # Down
-    #(0.5, 1.0), # Up
-    #(0.0, 0.5), # Left
-    #(1.0, 0.5), # Right
+    (0.5, 0.5), # Neutral
+    (0.5, 0.0), # Down
+    (0.5, 1.0), # Up
+    (0.0, 0.5), # Left
+    (1.0, 0.5), # Right
 ]
 Z_stick = [
-    #(0.5, 0.5), # Neutral
+    (0.5, 0.5), # Neutral
 ]
 Y_stick = [
-    #(0.5, 0.5), # Neutral
-    #(0.0, 0.5), # Left
-    #(1.0, 0.5), # Right
+    (0.5, 0.5), # Neutral
+    (0.0, 0.5), # Left
+    (1.0, 0.5), # Right
 ]
 L_stick = [
-    #(0.5, 0.5), # Neutral
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
-    #(0.075, 0.25), # Wavedash left full
-    #(0.925, 0.25), # Wavedash right full
+    (0.5, 0.5), # Neutral
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
+    (0.075, 0.25), # Wavedash left full
+    (0.925, 0.25), # Wavedash right full
 ]
 
 _controller = []
@@ -114,9 +114,8 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    #num_actions = 30
+    num_actions = 30
     #observation_size = 856
-    num_actions = 5
     observation_size = 792
 
     def __init__(self, seed=None, **dolphin_options):
@@ -140,7 +139,7 @@ class MeleeEnv(object):
 
         observations = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
         rewards = [self._compute_reward(0), self._compute_reward(1)]
-        dones = [False, False]
+        dones = [self._player_just_died(0), self._player_just_died(1)]
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
@@ -176,22 +175,23 @@ class MeleeEnv(object):
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
         return np.concatenate((main_player, other_player))
 
-    def _compute_reward(self, player_perspective):
-        return 1.0 if abs(self._dolphin_state.players[player_perspective].x - 5.0) < 5.0 else 0.0
-
 #    def _compute_reward(self, player_perspective):
-#        main_player = player_perspective
-#        other_player = 1 - player_perspective
-#
-#        reward = 0.0
-#
-#        if self._player_just_died(other_player):
-#            reward = 1.0
-#
-#        if self._player_just_died(main_player):
-#            reward = -1.0
-#
-#        return reward
+#        target_location = 0.0
+#        return 1.0 if abs(self._dolphin_state.players[player_perspective].x - target_location) < 5.0 else 0.0
+
+    def _compute_reward(self, player_perspective):
+        main_player = player_perspective
+        other_player = 1 - player_perspective
+
+        reward = 0.0
+
+        if self._player_just_died(other_player):
+            reward = 1.0
+
+        if self._player_just_died(main_player):
+            reward = -1.0
+
+        return reward
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective

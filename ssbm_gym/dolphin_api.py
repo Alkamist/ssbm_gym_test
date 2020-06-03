@@ -115,7 +115,7 @@ class DolphinAPI(Default):
     def close(self):
         for pad in self.pads:
             del pad
-        del self.mw
+        #del self.mw
         self.dolphin_process.terminate()
         time.sleep(0.1)
         self.dolphin_process.terminate()

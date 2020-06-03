@@ -1,12 +1,10 @@
-import random
+from copy import deepcopy
 
 import torch
 
 from melee_env import MeleeEnv
-from DQN import Policy
+from DQN import DQN
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 melee_options = dict(
     render=True,
@@ -18,27 +16,22 @@ melee_options = dict(
     stage='final_destination',
 )
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 if __name__ == "__main__":
-    policy = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions).to(device)
-    policy.load_state_dict(torch.load("checkpoints/agent.pth"))
-    policy.eval()
+    network = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, 1, device)
+    network.load("checkpoints/agent.pth")
 
-    env = MeleeEnv(worker_id=512, **melee_options)
+    env = MeleeEnv(**melee_options)
     states = env.reset()
-    states = torch.tensor(states, dtype=torch.float32, device=device)
 
-    frames = 0
     with torch.no_grad():
         while True:
-            actions = policy(states).max(1)[1]
-            states, rewards, _, _ = env.step(actions.squeeze().cpu().numpy())
-            states = torch.tensor(states, dtype=torch.float32, device=device)
+            actions = []
+            for player_id in range(2):
+                state = torch.tensor(states[player_id], dtype=torch.float32, device=device).unsqueeze(0)
+                actions.append(network.act(state, epsilon=0.0))
 
-            #if frames % 20 == 0:
-            #    print(states)
-
-            frames += 1
-
-            if rewards[1] != 0.0:
-                print("Reward: %.4f" % rewards[1])
+            next_states, rewards, dones, _ = env.step(actions)
+            states = deepcopy(next_states)

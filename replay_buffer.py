@@ -48,7 +48,7 @@ class ReplayBuffer(object):
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, max_size, alpha=0.9, beta=01.0):
+    def __init__(self, max_size, alpha=0.9, beta=1.0):
         super(PrioritizedReplayBuffer, self).__init__(max_size)
         self.alpha = alpha
         self.beta = beta
