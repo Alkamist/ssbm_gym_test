@@ -6,21 +6,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-class ResidualBlock(nn.Module):
-    """ https://arxiv.org/abs/1806.10909 """
-    def __init__(self, input_size, hidden_size):
-        super(ResidualBlock, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.mlp = nn.Sequential(
-            nn.Linear(self.input_size, self.hidden_size),
-            nn.ReLU(True),
-            nn.Linear(self.hidden_size, self.input_size),
-            nn.ReLU(True),
-        )
-
-    def forward(self, x):
-        return x + self.mlp(x)
+#def initialize_weights(module):
+#    if isinstance(module, nn.Linear) or isinstance(module, nn.Conv2d):
+#        torch.nn.init.kaiming_uniform_(module.weight)
+#        if module.bias is not None:
+#            torch.nn.init.constant_(module.bias, 0)
 
 
 class Policy(nn.Module):
@@ -30,18 +20,16 @@ class Policy(nn.Module):
         self.features = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-        )
+        )#.apply(initialize_weights)
 
         self.value = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
-            #ResidualBlock(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
 
         self.advantage = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
-            #ResidualBlock(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, output_size),
         )
@@ -112,13 +100,12 @@ class DQN():
 
         expected_state_action_values = reward_batch + (next_state_values * self.gamma) * (1.0 - dones_batch)
 
+        #loss = self.loss_criterion(state_action_values, expected_state_action_values)
+
         loss = self.loss_criterion(state_action_values, expected_state_action_values) * weights
         priorities = loss
         loss = loss.mean()
-
         replay_buffer.update_priorities(indices, priorities)
-
-        #loss = self.loss_criterion(state_action_values, expected_state_action_values)
 
         self.optimizer.zero_grad()
         loss.backward()
