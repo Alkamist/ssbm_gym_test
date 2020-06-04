@@ -3,8 +3,6 @@ from collections import namedtuple
 
 import numpy as np
 
-from segment_tree import SumSegmentTree, MinSegmentTree
-
 
 Transition = namedtuple("Transition", field_names=["state", "action", "reward", "next_state", "done"])
 
@@ -48,42 +46,44 @@ class ReplayBuffer(object):
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, max_size, alpha=0.9, beta=1.0):
+    def __init__(self, max_size, beta_frames):
         super(PrioritizedReplayBuffer, self).__init__(max_size)
-        self.alpha = alpha
-        self.beta = beta
+        self.alpha = 0.9
+        self.beta_start = 0.4
+        self.beta_frames = beta_frames
         self.epsilon = 0.01
-        self.max_priority = 1.0
-
-        tree_capacity = 1
-        while tree_capacity < max_size:
-            tree_capacity *= 2
-
-        self._tree_sum = SumSegmentTree(tree_capacity)
-        self._tree_min = MinSegmentTree(tree_capacity)
+        self.priorities = np.zeros((max_size,), dtype=np.float32)
+        self.times_sampled = 0
 
     def add(self, state, action, reward, next_state, done):
-        idx = self.next_index
-        super().add(state, action, reward, next_state, done)
-        priority = self.max_priority ** self.alpha
-        self._tree_sum[idx] = priority
-        self._tree_min[idx] = priority
+        self.priorities[self.next_index] = self.priorities.max() if self.storage else 1.0
+        super(PrioritizedReplayBuffer, self).add(state, action, reward, next_state, done)
 
     def sample(self, batch_size):
-        mass = []
-        weights = []
-        total = self._tree_sum.sum(0, len(self.storage) - 1)
-        mass = np.random.random(size=batch_size) * total
-        indices = self._tree_sum.find_prefixsum_idx(mass)
-        p_min = self._tree_min.min() / self._tree_sum.sum()
-        max_weight = (p_min * len(self.storage)) ** (-self.beta)
-        p_sample = self._tree_sum[indices] / self._tree_sum.sum()
-        weights = (p_sample * len(self.storage)) ** (-self.beta) / max_weight
-        encoded_sample = self._encode_sample(indices)
-        return encoded_sample, indices, weights
+        beta = min(1.0, self.beta_start + self.times_sampled * (1.0 - self.beta_start) / self.beta_frames)
 
-    def update_priorities(self, indices, absolute_errors):
-        priorities = (absolute_errors + self.epsilon) ** self.alpha
-        self._tree_sum[indices] = priorities
-        self._tree_min[indices] = priorities
-        self.max_priority = max(self.max_priority, np.max(priorities))
+        storage_length = len(self.storage)
+
+        if storage_length == self.max_size:
+            priorities = self.priorities
+        else:
+            priorities = self.priorities[:self.next_index]
+
+        probabilities = (priorities + self.epsilon) ** self.alpha
+        probabilities /= probabilities.sum()
+
+        indices = np.random.choice(storage_length, batch_size, p=probabilities)
+
+        weights = (storage_length * probabilities[indices]) ** (-beta)
+        weights /= weights.max()
+
+        self.times_sampled += 1
+
+        return self._encode_sample(indices), indices, weights
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        for idx, priority in zip(batch_indices, batch_priorities):
+            self.priorities[idx] = priority
+
+    def __len__(self):
+        return len(self.storage)

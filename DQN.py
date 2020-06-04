@@ -96,7 +96,10 @@ class DQN():
         self.policy_net.train()
         self.target_net.eval()
 
+        #batch = replay_buffer.sample(self.batch_size)
+
         batch, indices, weights = replay_buffer.sample(self.batch_size)
+        weights = torch.tensor(weights, dtype=torch.float32, device=self.device)
 
         state_batch = torch.tensor(batch.state, dtype=torch.float32, device=self.device)
         action_batch = torch.tensor(batch.action, dtype=torch.long, device=self.device).unsqueeze(1)
@@ -109,11 +112,13 @@ class DQN():
 
         expected_state_action_values = reward_batch + (next_state_values * self.gamma) * (1.0 - dones_batch)
 
-        weights = torch.tensor(weights, dtype=torch.float32, device=self.device)
-        loss = (self.loss_criterion(state_action_values, expected_state_action_values) * weights).mean()
+        loss = self.loss_criterion(state_action_values, expected_state_action_values) * weights
+        priorities = loss
+        loss = loss.mean()
 
-        errors = torch.abs(state_action_values - expected_state_action_values).detach().cpu().numpy()
-        replay_buffer.update_priorities(indices, errors)
+        replay_buffer.update_priorities(indices, priorities)
+
+        #loss = self.loss_criterion(state_action_values, expected_state_action_values)
 
         self.optimizer.zero_grad()
         loss.backward()
