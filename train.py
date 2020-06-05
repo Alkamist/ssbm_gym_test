@@ -5,14 +5,14 @@ from copy import deepcopy
 import torch
 
 from melee_env import MeleeEnv
-from replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
-#from replay_buffer import ReplayBuffer as ReplayBuffer
+#from replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
+from replay_buffer import ReplayBuffer as ReplayBuffer
 from DQN import DQN
 from timeout import timeout
 
 
 melee_options = dict(
-    render=True,
+    render=False,
     speed=0,
     player1='ai',
     player2='ai',
@@ -30,11 +30,14 @@ print_every = 200
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 500
+epsilon_decay = 3000
 
 
 def test_network(network, testing_thread_dict):
-    env = MeleeEnv(worker_id=512, **melee_options)
+    modified_melee_options = deepcopy(melee_options)
+    modified_melee_options["render"] = True
+
+    env = MeleeEnv(worker_id=512, **modified_melee_options)
     states = env.reset()
 
     while True:
@@ -111,11 +114,10 @@ if __name__ == "__main__":
                     else:
                         average_reward= 0.0
 
-                    print("Frames: {} / Learns: {} / Average Reward: {:.4f} / Epsilon: {:.2f}".format(
+                    print("Frames: {} / Learns: {} / Average Reward: {:.4f}".format(
                         loops * 2,
                         learns,
                         average_reward,
-                        epsilon,
                     ))
 
                 #epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
