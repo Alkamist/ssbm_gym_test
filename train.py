@@ -1,17 +1,13 @@
-import time
 import math
-import random
 import threading
 from copy import deepcopy
 
-import numpy as np
 import torch
-import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
 #from replay_buffer import ReplayBuffer as ReplayBuffer
-from DQN import DQN, Policy
+from DQN import DQN
 from timeout import timeout
 
 
@@ -27,41 +23,32 @@ melee_options = dict(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#learning_rate = 3e-5
-learning_rate = 0.001
-batch_size = 1024
-save_every = 200
-learn_every = 128
+learning_rate = 3e-5
+batch_size = 64
+learn_every = 8
+print_every = 200
 
 epsilon_start = 1.0
 epsilon_end = 0.01
 epsilon_decay = 500
 
 
-def generate_frames(worker_id, network, replay_buffer, thread_dict):
-    env = MeleeEnv(worker_id=worker_id, **melee_options)
+def test_network(network, testing_thread_dict):
+    env = MeleeEnv(worker_id=512, **melee_options)
     states = env.reset()
 
     while True:
         try:
             actions = []
             for player_id in range(2):
-                actions.append(network.act(states[player_id], thread_dict["epsilon"]))
+                actions.append(network.act(states[player_id], 0.0))
 
             step_env_with_timeout = timeout(5)(lambda : env.step(actions))
-            next_states, rewards, dones, _ = step_env_with_timeout()
-
-            thread_dict["rewards"].append(rewards[0])
+            next_states, rewards, _, _ = step_env_with_timeout()
 
             for player_id in range(2):
-                replay_buffer.add(states[player_id],
-                                  actions[player_id],
-                                  rewards[player_id],
-                                  next_states[player_id],
-                                  dones[player_id])
-                thread_dict["frames_generated"] += 1
-                if thread_dict["frames_generated"] % learn_every == 0:
-                    thread_dict["learns_allowed"] += 1
+                testing_thread_dict["total_rewards"] += rewards[player_id]
+                testing_thread_dict["frames_since_print"] += 1
 
             states = deepcopy(next_states)
 
@@ -69,7 +56,7 @@ def generate_frames(worker_id, network, replay_buffer, thread_dict):
             env.close()
 
         except:
-            print("Dolphin crashed.")
+            print("The testing dolphin crashed.")
             states = env.reset()
 
 
@@ -77,36 +64,68 @@ if __name__ == "__main__":
     network = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate)
     #network.load("checkpoints/agent.pth")
 
-    replay_buffer = ReplayBuffer(500000)
+    replay_buffer = ReplayBuffer(100000)
 
-    thread_dict = {
-        "frames_generated" : 0,
-        "learns_allowed" : 0,
-        "rewards" : [],
-        "epsilon" : epsilon_start,
+    testing_thread_dict = {
+        "frames_since_print" : 0,
+        "total_rewards" : 0.0,
     }
-    buffer_thread = threading.Thread(target=generate_frames, args=(0, network, replay_buffer, thread_dict))
-    buffer_thread.start()
+    testing_thread = threading.Thread(target=test_network, args=(network, testing_thread_dict))
+    testing_thread.start()
 
+    env = MeleeEnv(worker_id=0, **melee_options)
+    states = env.reset()
+
+    loops = 0
     learns = 0
+    epsilon = epsilon_start
     while True:
-        if len(replay_buffer) > batch_size:
-            while thread_dict["learns_allowed"] > 0:
+        try:
+            loops += 1
+
+            actions = []
+            for player_id in range(2):
+                actions.append(network.act(states[player_id], epsilon))
+
+            step_env_with_timeout = timeout(5)(lambda : env.step(actions))
+            next_states, rewards, dones, _ = step_env_with_timeout()
+
+            for player_id in range(2):
+                replay_buffer.add(states[player_id],
+                                  actions[player_id],
+                                  rewards[player_id],
+                                  next_states[player_id],
+                                  dones[player_id])
+
+            states = deepcopy(next_states)
+
+            if loops % learn_every == 0:
                 network.learn(replay_buffer)
-                thread_dict["learns_allowed"] -= 1
 
                 learns += 1
-                if learns % save_every == 0:
+                if learns % print_every == 0:
+                    if testing_thread_dict["frames_since_print"] > 0:
+                        average_reward = testing_thread_dict["total_rewards"] / testing_thread_dict["frames_since_print"]
+                        testing_thread_dict["total_rewards"] = 0.0
+                        testing_thread_dict["frames_since_print"] = 0
+                    else:
+                        average_reward= 0.0
+
                     print("Frames: {} / Learns: {} / Average Reward: {:.4f} / Epsilon: {:.2f}".format(
-                        thread_dict["frames_generated"],
+                        loops * 2,
                         learns,
-                        np.mean(thread_dict["rewards"]),
-                        thread_dict["epsilon"],
+                        average_reward,
+                        epsilon,
                     ))
-                    reward_buffer = []
 
-                thread_dict["epsilon"] = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
+                #epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
 
-        time.sleep(0.1)
 
-    buffer_thread.join()
+        except KeyboardInterrupt:
+            env.close()
+
+        except:
+            print("The training dolphin crashed.")
+            states = env.reset()
+
+    testing_thread.join()

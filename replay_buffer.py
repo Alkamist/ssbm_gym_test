@@ -1,5 +1,5 @@
 import random
-from collections import namedtuple, deque
+from collections import namedtuple
 
 import numpy as np
 
@@ -8,29 +8,21 @@ Transition = namedtuple("Transition", field_names=["state", "action", "reward", 
 
 
 class ReplayBuffer(object):
-    def __init__(self, max_size, gamma=0.997):
+    def __init__(self, max_size):
         self.storage = []
         self.max_size = max_size
         self.next_index = 0
-        self.gamma = gamma
-        self.n_step_buffer = deque(maxlen=5)
 
     def __len__(self) -> int:
         return len(self.storage)
 
     def add(self, state, action, reward, next_state, done):
-        transition = Transition(state, action, reward, next_state, done)
+        data = Transition(state, action, reward, next_state, done)
 
-        self._add_transition(transition)
-
-        #self.n_step_buffer.append(transition)
-        #self._add_transition(self._calculate_n_step_return())
-
-    def _add_transition(self, transition):
         if self.next_index >= len(self.storage):
-            self.storage.append(transition)
+            self.storage.append(data)
         else:
-            self.storage[self.next_index] = transition
+            self.storage[self.next_index] = data
 
         self.next_index = (self.next_index + 1) % self.max_size
 
@@ -48,6 +40,52 @@ class ReplayBuffer(object):
 
         return Transition(states, actions, rewards, next_states, dones)
 
+    def sample(self, batch_size):
+        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
+        return self._encode_sample(indices)
+
+
+#class ReplayBuffer(object):
+#    def __init__(self, max_size, gamma=0.997):
+#        self.storage = []
+#        self.max_size = max_size
+#        self.next_index = 0
+#        self.gamma = gamma
+#        self.n_step_buffer = deque(maxlen=5)
+#
+#    def __len__(self) -> int:
+#        return len(self.storage)
+#
+#    def add(self, state, action, reward, next_state, done):
+#        transition = Transition(state, action, reward, next_state, done)
+#
+#        #self._add_transition(transition)
+#
+#        self.n_step_buffer.append(transition)
+#        self._add_transition(self._calculate_n_step_return())
+#
+#    def _add_transition(self, transition):
+#        if self.next_index >= len(self.storage):
+#            self.storage.append(transition)
+#        else:
+#            self.storage[self.next_index] = transition
+#
+#        self.next_index = (self.next_index + 1) % self.max_size
+#
+#    def _encode_sample(self, indices):
+#        states, actions, rewards, next_states, dones = [], [], [], [], []
+#
+#        for i in indices:
+#            data = self.storage[i]
+#            state, action, reward, next_state, done = data
+#            states.append(state)
+#            actions.append(action)
+#            rewards.append(reward)
+#            next_states.append(next_state)
+#            dones.append(done)
+#
+#        return Transition(states, actions, rewards, next_states, dones)
+#
 #    def _calculate_n_step_return(self):
 #        output = 0
 #
@@ -55,10 +93,10 @@ class ReplayBuffer(object):
 #            output += self.n_step_buffer[idx].reward * (self.gamma ** idx)
 #
 #        return Transition(self.n_step_buffer[0].state, self.n_step_buffer[0].action, output, self.n_step_buffer[-1].next_state, self.n_step_buffer[-1].done)
-
-    def sample(self, batch_size):
-        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
-        return self._encode_sample(indices)
+#
+#    def sample(self, batch_size):
+#        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
+#        return self._encode_sample(indices)
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
