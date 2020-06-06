@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=1024):
+    def __init__(self, input_size, output_size, hidden_size=512):
         super(Policy, self).__init__()
 
         self.features = nn.Sequential(

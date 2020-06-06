@@ -1,6 +1,4 @@
 import math
-import time
-import random
 import threading
 from copy import deepcopy
 
@@ -27,7 +25,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #learning_rate = 3e-5
 learning_rate = 0.0001
 batch_size = 64
+learn_every = 2
 print_every = 200
+
+epsilon_start = 1.0
+epsilon_end = 0.01
+epsilon_decay = 3000
 
 
 def test_network(network, testing_thread_dict):
@@ -53,28 +56,6 @@ def test_network(network, testing_thread_dict):
         states = deepcopy(next_states)
 
 
-def generate_random_frames(replay_buffer, thread_dict):
-    env = MeleeEnv(worker_id=0, **melee_options)
-    states = env.reset()
-
-    while True:
-        #actions = [random.randrange(MeleeEnv.num_actions), 0]
-        actions = [random.randrange(MeleeEnv.num_actions), random.randrange(MeleeEnv.num_actions)]
-
-        next_states, rewards, dones, _ = env.step(actions)
-
-        replay_buffer.add(states[0],
-                          actions[0],
-                          rewards[0],
-                          next_states[0],
-                          dones[0])
-
-        thread_dict["frames_generated"] += 1
-        thread_dict["learns_allowed"] += 1
-
-        states = deepcopy(next_states)
-
-
 if __name__ == "__main__":
     network = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate)
     #network.load("checkpoints/agent.pth")
@@ -88,19 +69,40 @@ if __name__ == "__main__":
     testing_thread = threading.Thread(target=test_network, args=(network, testing_thread_dict))
     testing_thread.start()
 
-    training_thread_dict = {
-        "frames_generated" : 0,
-        "learns_allowed" : 0,
-    }
-    training_thread = threading.Thread(target=generate_random_frames, args=(replay_buffer, training_thread_dict))
-    training_thread.start()
+    env = MeleeEnv(worker_id=0, **melee_options)
+    states = env.reset()
 
+    loops = 0
     learns = 0
+    epsilon = epsilon_start
     while True:
-        while training_thread_dict["learns_allowed"] > 0:
-            network.learn(replay_buffer)
+        loops += 1
 
-            training_thread_dict["learns_allowed"] -= 1
+        #actions = []
+        #for player_id in range(2):
+        #    actions.append(network.act(states[player_id], epsilon))
+
+        actions = [network.act(states[0], epsilon), 0]
+
+        next_states, rewards, dones, _ = env.step(actions)
+
+        replay_buffer.add(states[0],
+                          actions[0],
+                          rewards[0],
+                          next_states[0],
+                          dones[0])
+
+#        for player_id in range(2):
+#            replay_buffer.add(states[player_id],
+#                              actions[player_id],
+#                              rewards[player_id],
+#                              next_states[player_id],
+#                              dones[player_id])
+
+        states = deepcopy(next_states)
+
+        if loops % learn_every == 0:
+            network.learn(replay_buffer)
 
             learns += 1
             if learns % print_every == 0:
@@ -114,12 +116,11 @@ if __name__ == "__main__":
                     average_reward = 0.0
 
                 print("Frames: {} / Learns: {} / Average Reward: {:.4f}".format(
-                    training_thread_dict["frames_generated"],
+                    loops * 2,
                     learns,
                     average_reward,
                 ))
 
-        time.sleep(0.1)
+            #epsilon = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
 
-    training_thread.join()
     testing_thread.join()
