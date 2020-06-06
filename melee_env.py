@@ -116,7 +116,7 @@ def one_hot(x, n):
 class MeleeEnv(object):
     num_actions = 2
     #observation_size = 856
-    observation_size = 8
+    observation_size = 792
 
     def __init__(self, seed=None, **dolphin_options):
         self.dolphin = DolphinAPI(**dolphin_options)
@@ -149,20 +149,20 @@ class MeleeEnv(object):
     def _player_state_to_numpy(self, state, previous_state):
         return np.array([
             #*one_hot(state.character, num_characters),
-            #*one_hot(state.action_state, num_melee_actions),
+            *one_hot(state.action_state, num_melee_actions),
             state.x / 100.0,
             state.y / 100.0,
             (state.x - previous_state.x) if previous_state is not None else 0.0,
             (state.y - previous_state.y) if previous_state is not None else 0.0,
-            #state.action_frame / 30.0,
-            #state.percent / 100.0,
-            #state.facing,
-            #1.0 if state.invulnerable else 0.0,
-            #state.hitlag_frames_left / 30.0,
-            #state.hitstun_frames_left / 30.0,
-            #state.shield_size / 60.0,
-            #1.0 if state.in_air else 0.0,
-            #state.jumps_used,
+            state.action_frame / 30.0,
+            state.percent / 100.0,
+            state.facing,
+            1.0 if state.invulnerable else 0.0,
+            state.hitlag_frames_left / 30.0,
+            state.hitstun_frames_left / 30.0,
+            state.shield_size / 60.0,
+            1.0 if state.in_air else 0.0,
+            state.jumps_used,
         ])
 
     def _dolphin_state_to_numpy(self, player_perspective):
@@ -185,23 +185,6 @@ class MeleeEnv(object):
         target_location = 0.0
         reward = max(-1.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - target_location))
         return reward
-
-#    def _compute_reward(self, player_perspective):
-#        main_player = player_perspective
-#        other_player = 1 - player_perspective
-#
-#        reward = 0.0
-#
-#        reward += 0.001 * self._percent_taken_by_player(other_player)
-#        #reward -= 0.01 * self._percent_taken_by_player(main_player)
-#
-#        #if self._player_just_died(other_player):
-#        #    reward = 1.0
-#
-#        if self._player_just_died(main_player):
-#            reward = -1.0
-#
-#        return reward
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective
