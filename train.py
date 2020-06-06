@@ -12,7 +12,7 @@ from timeout import timeout
 
 
 melee_options = dict(
-    render=False,
+    render=True,
     speed=0,
     player1='ai',
     player2='ai',

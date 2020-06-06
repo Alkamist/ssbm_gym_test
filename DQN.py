@@ -6,21 +6,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-#def initialize_weights(module):
-#    if isinstance(module, nn.Linear) or isinstance(module, nn.Conv2d):
-#        torch.nn.init.kaiming_uniform_(module.weight)
-#        if module.bias is not None:
-#            torch.nn.init.constant_(module.bias, 0)
-
-
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=512):
+    def __init__(self, input_size, output_size, hidden_size=1024):
         super(Policy, self).__init__()
 
         self.features = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-        )#.apply(initialize_weights)
+        )
 
         self.value = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
@@ -38,7 +31,7 @@ class Policy(nn.Module):
         features = self.features(state)
         values = self.value(features)
         advantages = self.advantage(features)
-        return values + (advantages - advantages.mean())
+        return values + advantages - advantages.mean()
 
 
 class DQN():
