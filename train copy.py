@@ -29,6 +29,10 @@ learning_rate = 0.0001
 batch_size = 16
 print_every = 200
 
+epsilon_start = 1.0
+epsilon_end = 0.01
+epsilon_decay = 10000
+
 
 def test_network(network, testing_thread_dict):
     env = MeleeEnv(worker_id=512, **melee_options)
@@ -53,13 +57,13 @@ def test_network(network, testing_thread_dict):
         states = deepcopy(next_states)
 
 
-def generate_random_frames(replay_buffer, thread_dict):
+def generate_random_frames(replay_buffer, thread_dict, epsilon):
     env = MeleeEnv(worker_id=0, **melee_options)
     states = env.reset()
 
     while True:
-        #actions = [random.randrange(MeleeEnv.num_actions), 0]
-        actions = [random.randrange(MeleeEnv.num_actions), random.randrange(MeleeEnv.num_actions)]
+        actions = [random.randrange(MeleeEnv.num_actions), 0]
+        #actions = [random.randrange(MeleeEnv.num_actions), random.randrange(MeleeEnv.num_actions)]
 
         next_states, rewards, dones, _ = env.step(actions)
 
@@ -92,15 +96,17 @@ if __name__ == "__main__":
         "frames_generated" : 0,
         "learns_allowed" : 0,
     }
-    training_thread = threading.Thread(target=generate_random_frames, args=(replay_buffer, training_thread_dict))
+    training_thread = threading.Thread(target=generate_random_frames, args=(replay_buffer, training_thread_dict, epsilon))
     training_thread.start()
 
+    epsilon = [epsilon_start]
     learns = 0
     while True:
         while training_thread_dict["learns_allowed"] > 0:
             network.learn(replay_buffer)
-
             training_thread_dict["learns_allowed"] -= 1
+
+            epsilon[0] = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
 
             learns += 1
             if learns % print_every == 0:

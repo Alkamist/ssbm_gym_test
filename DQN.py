@@ -54,9 +54,9 @@ class DQN():
         with torch.no_grad():
             if random.random() > epsilon:
                 state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-                return self.policy_net(state).max(1)[1].item()
+                return self.policy_net(state).max(1)[1].item(), False
             else:
-                return random.randrange(self.action_size)
+                return random.randrange(self.action_size), True
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)
