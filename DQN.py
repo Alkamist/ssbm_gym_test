@@ -50,13 +50,13 @@ class DQN():
         self.target_update_frequency = target_update_frequency
         self.learn_iterations = 0
 
-    def act(self, state, epsilon=0.0):
-        with torch.no_grad():
-            if random.random() > epsilon:
-                state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-                return self.policy_net(state).max(1)[1].item(), False
-            else:
-                return random.randrange(self.action_size), True
+    #def act(self, state, epsilon=0.0):
+    #    with torch.no_grad():
+    #        if random.random() > epsilon:
+    #            state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+    #            return self.policy_net(state).max(1)[1].item(), False
+    #        else:
+    #            return random.randrange(self.action_size), True
 
     def save(self, file_path):
         torch.save(self.policy_net.state_dict(), file_path)

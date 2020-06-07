@@ -25,34 +25,41 @@ NONE_stick = [
     (0.65, 0.5), # Walk right
 ]
 A_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 0.0), # Down smash
-    (0.5, 1.0), # Up smash
-    (0.0, 0.5), # Left smash
-    (1.0, 0.5), # Right smash
+    (0.5, 0.5), # Middle
+    (0.5, 0.0), # Down
+    (0.5, 1.0), # Up
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
     (0.35, 0.5), # Left tilt
     (0.65, 0.5), # Right tilt
     (0.5, 0.35), # Down tilt
     (0.5, 0.65), # Up tilt
 ]
 B_stick = [
-    (0.5, 0.5), # Neutral
+    (0.5, 0.5), # Middle
     (0.5, 0.0), # Down
     (0.5, 1.0), # Up
-    (0.0, 0.5), # Left
     (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
 ]
 Z_stick = [
-    (0.5, 0.5), # Neutral
+    (0.5, 0.5), # Middle
+    (0.5, 0.0), # Down
+    (0.5, 1.0), # Up
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
 ]
 Y_stick = [
-    (0.0, 0.5), # Left
+    (0.5, 0.5), # Middle
+    (0.5, 0.0), # Down
+    (0.5, 1.0), # Up
     (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
 ]
 L_stick = [
-    (0.5, 0.5), # Neutral
-    (0.5, 1.0), # Up
+    (0.5, 0.5), # Middle
     (0.5, 0.0), # Down
+    (0.5, 1.0), # Up
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
     (0.075, 0.25), # Wavedash left full
@@ -115,7 +122,8 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    num_actions = 31
+    #num_actions = 31
+    num_actions = 38
     #observation_size = 856
     observation_size = 792
 
@@ -193,8 +201,11 @@ class MeleeEnv(object):
 
         reward = 0.0
 
-        reward += min(1.0, 0.005 * self._percent_taken_by_player(other_player))
-        reward -= min(1.0, 0.005 * self._percent_taken_by_player(main_player))
+        reward += min(1.0, 0.003 * self._percent_taken_by_player(other_player))
+        reward -= min(1.0, 0.003 * self._percent_taken_by_player(main_player))
+
+        if self._player_just_died(other_player):
+            reward = 1.0
 
         if self._player_just_died(main_player):
             reward = -1.0
