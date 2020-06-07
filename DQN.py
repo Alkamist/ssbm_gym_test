@@ -58,9 +58,6 @@ class Policy(nn.Module):
             nn.Linear(hidden_size, output_size),
         )
 
-    def reset_rnn(self):
-        self.lstm_state = None
-
     def forward(self, state):
         features = self.features(state)
         lstm_output, self.lstm_state = self.lstm(features, self.lstm_state)
@@ -98,19 +95,20 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def reset_rnn(self):
-        self.policy_net.reset_rnn()
-        self.target_net.reset_rnn()
-
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, lstm_hidden_states, lstm_cell_states):
         self.policy_net.train()
         self.target_net.eval()
 
-        state_batch = torch.tensor(states, dtype=torch.float32, device=self.device)
-        action_batch = torch.tensor(actions, dtype=torch.long, device=self.device).unsqueeze(2)
-        reward_batch = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        next_state_batch = torch.tensor(next_states, dtype=torch.float32, device=self.device)
-        dones_batch = torch.tensor(dones, dtype=torch.float32, device=self.device)
+        lstm_states = (torch.cat(lstm_hidden_states, dim=1), torch.cat(lstm_cell_states, dim=1))
+
+        self.policy_net.lstm_state = lstm_states
+        self.target_net.lstm_state = lstm_states
+
+        state_batch = torch.tensor([states], dtype=torch.float32, device=self.device)
+        action_batch = torch.tensor([actions], dtype=torch.long, device=self.device).unsqueeze(2)
+        reward_batch = torch.tensor([rewards], dtype=torch.float32, device=self.device)
+        next_state_batch = torch.tensor([next_states], dtype=torch.float32, device=self.device)
+        dones_batch = torch.tensor([dones], dtype=torch.float32, device=self.device)
 
         state_action_values = self.policy_net(state_batch).gather(2, action_batch).squeeze(2)
         next_state_values = self.target_net(next_state_batch).max(2)[0].detach()
