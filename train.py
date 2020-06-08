@@ -16,7 +16,7 @@ melee_options = dict(
     render=True,
     speed=0,
     player1='ai',
-    player2='human',
+    player2='cpu',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
@@ -26,10 +26,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 learning_rate = 0.0001
 batch_size = 16
+save_every = 2000
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 700
+epsilon_decay = 10000
 
 
 def generate_frames(worker_id, learner, thread_dict):
@@ -67,8 +68,6 @@ def generate_frames(worker_id, learner, thread_dict):
         actions = [action.item(), 0]
         next_states, rewards, dones, _ = env.step(actions)
 
-        rewards_since_output += rewards[0]
-
         storage_buffer.add_item((state,
                                  action,
                                  torch.tensor([[rewards[0]]], dtype=torch.float32, device=device),
@@ -78,6 +77,12 @@ def generate_frames(worker_id, learner, thread_dict):
                                  policy_net.rnn_state[1].detach()))
 
         states = deepcopy(next_states)
+
+        rewards_since_output += rewards[0]
+        if frames_since_output > 3600:
+            generator_thread_dict["average_reward"] = rewards_since_output / frames_since_output
+            rewards_since_output = 0.0
+            frames_since_output = 0
 
         if len(storage_buffer) > batch_size:
             batch = storage_buffer.sample_batch(batch_size)
@@ -90,21 +95,18 @@ def generate_frames(worker_id, learner, thread_dict):
                 torch.cat(next_state_batch, dim=1),
                 torch.cat(done_batch, dim=1),
                 (torch.cat(rnn_state_batch, dim=1), torch.cat(rnn_cell_batch, dim=1)),
-                rewards_since_output / frames_since_output,
             ))
-
-            rewards_since_output = 0.0
-            frames_since_output = 0
 
 
 if __name__ == "__main__":
     learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate)
-    #learner.load("checkpoints/agent.pth")
+    learner.load("checkpoints/agent.pth")
 
     generator_thread_dict = {
         "batches" : deque(maxlen=8),
         "epsilon" : epsilon_start,
         "frames_generated" : 0,
+        "average_reward" : 0.0,
     }
     generator_thread = threading.Thread(target=generate_frames, args=(0, learner, generator_thread_dict))
     generator_thread.start()
@@ -116,13 +118,13 @@ if __name__ == "__main__":
             learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4], batch[5])
             learns += 1
 
-            if learns % 500 == 0:
-                #network.save("checkpoints/agent" + str(learns) + ".pth")
+            if learns % save_every == 0:
+                learner.save("checkpoints/agent" + str(learns) + ".pth")
                 print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Average Reward {:.4f}".format(
                     generator_thread_dict["frames_generated"],
                     learns,
                     generator_thread_dict["epsilon"],
-                    batch[6],
+                    generator_thread_dict["average_reward"],
                 ))
 
             generator_thread_dict["epsilon"] = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
