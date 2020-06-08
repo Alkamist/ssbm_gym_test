@@ -28,9 +28,9 @@ learning_rate = 0.0001
 batch_size = 16
 save_every = 2000
 
-epsilon_start = 1.0
+epsilon_start = 0.01
 epsilon_end = 0.01
-epsilon_decay = 10000
+epsilon_decay = 20000
 
 
 def generate_frames(worker_id, learner, thread_dict):
