@@ -3,7 +3,6 @@ import math
 import random
 import threading
 from copy import deepcopy
-from collections import deque
 
 import torch
 
@@ -48,7 +47,6 @@ def generate_frames(worker_id, learner, thread_dict):
     frames_since_output = 0
     while True:
         frames_since_output += 1
-        thread_dict["frames_generated"] += 1
 
         policy_net.load_state_dict(learner.policy_net.state_dict())
 
@@ -83,7 +81,7 @@ def generate_frames(worker_id, learner, thread_dict):
             batch = storage_buffer.sample_batch(batch_size)
             state_batch, action_batch, reward_batch, next_state_batch, done_batch, rnn_state_batch, rnn_cell_batch = zip(*batch)
 
-            generator_thread_dict["batches"].append((
+            generator_thread_dict["batch"] = (
                 torch.cat(state_batch, dim=1),
                 torch.cat(action_batch, dim=1).unsqueeze(2),
                 torch.cat(reward_batch, dim=1),
@@ -91,7 +89,7 @@ def generate_frames(worker_id, learner, thread_dict):
                 torch.cat(done_batch, dim=1),
                 (torch.cat(rnn_state_batch, dim=1), torch.cat(rnn_cell_batch, dim=1)),
                 rewards_since_output / frames_since_output,
-            ))
+            )
 
             rewards_since_output = 0.0
             frames_since_output = 0
@@ -102,32 +100,32 @@ if __name__ == "__main__":
     #learner.load("checkpoints/agent.pth")
 
     generator_thread_dict = {
-        "batches" : deque(maxlen=8),
+        "batch" : None,
         "epsilon" : epsilon_start,
-        "frames_generated" : 0,
     }
     generator_thread = threading.Thread(target=generate_frames, args=(0, learner, generator_thread_dict))
     generator_thread.start()
 
     learns = 0
     while True:
-        while len(generator_thread_dict["batches"]) > 0:
-            batch = generator_thread_dict["batches"].pop()
+        batch = generator_thread_dict["batch"]
+
+        if batch is None:
+            time.sleep(0.01)
+
+        else:
             learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4], batch[5])
             learns += 1
 
             if learns % 500 == 0:
                 #network.save("checkpoints/agent" + str(learns) + ".pth")
                 print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Average Reward {:.4f}".format(
-                    generator_thread_dict["frames_generated"],
+                    learns * batch_size,
                     learns,
                     generator_thread_dict["epsilon"],
                     batch[6],
                 ))
 
             generator_thread_dict["epsilon"] = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
-
-        else:
-            time.sleep(0.1)
 
     generator_thread.join()
