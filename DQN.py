@@ -7,27 +7,27 @@ import torch.nn.functional as F
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size=512):
+    def __init__(self, input_size, output_size):
         super(Policy, self).__init__()
 
         self.features = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+            nn.Linear(input_size, 512),
             nn.ReLU(),
         )
 
-        self.rnn = nn.LSTM(hidden_size, hidden_size, 1)
+        self.rnn = nn.LSTM(512, 128, 1)
         self.rnn_state = None
 
         self.value = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(hidden_size, 1),
+            nn.Linear(128, 1),
         )
 
         self.advantage = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(hidden_size, output_size),
+            nn.Linear(128, output_size),
         )
 
     def forward(self, state):
@@ -67,12 +67,12 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones, rnn_states):
+    def learn(self, states, actions, rewards, next_states, dones):
         self.policy_net.train()
         self.target_net.eval()
 
-        self.policy_net.rnn_state = rnn_states
-        self.target_net.rnn_state = rnn_states
+        self.policy_net.rnn_state = None
+        self.target_net.rnn_state = None
 
         state_action_values = self.policy_net(states).gather(2, actions).squeeze(2)
         next_state_values = self.target_net(next_states).max(2)[0].detach()
