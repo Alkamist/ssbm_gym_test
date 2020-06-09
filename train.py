@@ -36,10 +36,10 @@ epsilon_decay = 80
 
 
 def generate_trajectories(worker_id, learner, thread_dict):
-    policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions).to(device=device)
+    policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device=device)
     policy_net.eval()
 
-    storage_buffer = StorageBuffer(256)
+    storage_buffer = StorageBuffer(32)
 
     env = MeleeEnv(worker_id=worker_id, **melee_options)
     states = env.reset()
@@ -49,13 +49,13 @@ def generate_trajectories(worker_id, learner, thread_dict):
 
     while True:
         policy_net.load_state_dict(learner.policy_net.state_dict())
-        policy_net.rnn_state = None
 
         state_trajectory = []
         action_trajectory = []
         reward_trajectory = []
         next_state_trajectory = []
         done_trajectory = []
+        initial_rnn_state = (policy_net.rnn_state[0].detach(), policy_net.rnn_state[1].detach())
 
         for _ in range(trajectory_steps):
             thread_dict["frames_generated"] += 1
@@ -89,7 +89,8 @@ def generate_trajectories(worker_id, learner, thread_dict):
                                  torch.cat(action_trajectory, dim=0),
                                  torch.cat(reward_trajectory, dim=0),
                                  torch.cat(next_state_trajectory, dim=0),
-                                 torch.cat(done_trajectory, dim=0)))
+                                 torch.cat(done_trajectory, dim=0),
+                                 initial_rnn_state))
 
         if len(storage_buffer) > batch_size:
             batch_of_trajectories = storage_buffer.sample_batch(batch_size)
@@ -100,6 +101,16 @@ def generate_trajectories(worker_id, learner, thread_dict):
                 for trajectory in batch_of_trajectories:
                     output[index].append(trajectory[index])
                 output[index] = torch.cat(output[index], dim=1)
+
+            rnn_states = []
+            rnn_cell_states = []
+            for trajectory in batch_of_trajectories:
+                full_state = trajectory[5]
+                rnn_states.append(full_state[0])
+                rnn_cell_states.append(full_state[1])
+
+            batched_rnn_state = (torch.cat(rnn_states, dim=1), torch.cat(rnn_cell_states, dim=1))
+            output.append(batched_rnn_state)
 
             thread_dict["batches"].append(output)
 
@@ -121,7 +132,7 @@ if __name__ == "__main__":
     while True:
         while len(generator_thread_dict["batches"]) > 0:
             batch = generator_thread_dict["batches"].pop()
-            learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4])
+            learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4], batch[5])
             learns += 1
 
             if learns % save_every == 0:

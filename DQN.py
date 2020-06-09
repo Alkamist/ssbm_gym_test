@@ -7,16 +7,21 @@ import torch.nn.functional as F
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, device):
         super(Policy, self).__init__()
 
+        hidden_size = 512
+
         self.features = nn.Sequential(
-            nn.Linear(input_size, 512),
+            nn.Linear(input_size, hidden_size),
             nn.ReLU(),
         )
 
-        self.rnn = nn.LSTM(512, 128, 1)
-        self.rnn_state = None
+        rnn_hidden_size = 128
+        num_rnn_layers = 1
+        self.rnn = nn.LSTM(hidden_size, rnn_hidden_size, num_rnn_layers)
+        self.rnn_state = (torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device),
+                          torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device))
 
         self.value = nn.Sequential(
             nn.Linear(128, 128),
@@ -29,6 +34,8 @@ class Policy(nn.Module):
             nn.ReLU(),
             nn.Linear(128, output_size),
         )
+
+        self.to(device)
 
     def forward(self, state):
         features = self.features(state)
@@ -46,8 +53,8 @@ class DQN():
         self.lr = lr
         self.gamma = gamma
         self.device = device
-        self.policy_net = Policy(state_size, action_size).to(self.device)
-        self.target_net = Policy(state_size, action_size).to(self.device)
+        self.policy_net = Policy(state_size, action_size, device=self.device)
+        self.target_net = Policy(state_size, action_size, device=self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.loss_criterion = torch.nn.SmoothL1Loss()
@@ -67,12 +74,12 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, rnn_state):
         self.policy_net.train()
         self.target_net.eval()
 
-        self.policy_net.rnn_state = None
-        self.target_net.rnn_state = None
+        self.policy_net.rnn_state = rnn_state
+        self.target_net.rnn_state = rnn_state
 
         state_action_values = self.policy_net(states).gather(2, actions).squeeze(2)
         next_state_values = self.target_net(next_states).max(2)[0].detach()
