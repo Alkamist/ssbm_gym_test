@@ -10,22 +10,28 @@ class Policy(nn.Module):
     def __init__(self, input_size, output_size, device):
         super(Policy, self).__init__()
 
-        feature_size = 256
-        hidden_size = 128
+        feature_size = 512
+        rnn_hidden_size = 512
+        hidden_size = 512
+        num_rnn_layers = 1
 
         self.features = nn.Sequential(
             nn.Linear(input_size, feature_size),
             nn.ReLU(),
         )
 
+        self.rnn = nn.LSTM(feature_size, rnn_hidden_size, num_rnn_layers)
+        self.rnn_state = (torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device),
+                          torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device))
+
         self.value = nn.Sequential(
-            nn.Linear(feature_size, hidden_size),
+            nn.Linear(rnn_hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
 
         self.advantage = nn.Sequential(
-            nn.Linear(feature_size, hidden_size),
+            nn.Linear(rnn_hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, output_size),
         )
@@ -34,8 +40,9 @@ class Policy(nn.Module):
 
     def forward(self, state):
         features = self.features(state)
-        values = self.value(features)
-        advantages = self.advantage(features)
+        rnn_output, self.rnn_state = self.rnn(features, self.rnn_state)
+        values = self.value(rnn_output)
+        advantages = self.advantage(rnn_output)
         return values + advantages - advantages.mean()
 
 
@@ -68,9 +75,12 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, rnn_state):
         self.policy_net.train()
         self.target_net.eval()
+
+        self.policy_net.rnn_state = rnn_state
+        self.target_net.rnn_state = rnn_state
 
         state_action_values = self.policy_net(states).gather(2, actions).squeeze(2)
         next_state_values = self.target_net(next_states).max(2)[0].detach()

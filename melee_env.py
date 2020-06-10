@@ -171,8 +171,8 @@ class MeleeEnv(object):
 #        reward += min(1.0, 0.003 * self._percent_taken_by_player(other_player))
 #        reward -= min(1.0, 0.003 * self._percent_taken_by_player(main_player))
 #
-#        if self._player_just_died(other_player):
-#            reward = 1.0
+#        #if self._player_just_died(other_player):
+#        #    reward = 1.0
 #
 #        if self._player_just_died(main_player):
 #            reward = -1.0

@@ -27,96 +27,62 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 learning_rate = 0.0001
 batch_size = 16
-trajectory_steps = 60
-save_every = 100
+memory_size = 100000
+save_every = 500
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 300
+epsilon_decay = 1000
 
 
-def generate_trajectories(worker_id, learner, thread_dict):
+def generate_frames(worker_id, learner, thread_dict):
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device=device)
     policy_net.eval()
 
-    storage_buffer = StorageBuffer(960)
+    storage_buffer = StorageBuffer(memory_size)
 
     env = MeleeEnv(worker_id=worker_id, **melee_options)
     states = env.reset()
 
-    action_to_repeat = 0
-    action_repeat_count = 0
-
     while True:
+        thread_dict["frames_generated"] += 1
+
         policy_net.load_state_dict(learner.policy_net.state_dict())
-        initial_rnn_state = (policy_net.rnn_state[0].detach(), policy_net.rnn_state[1].detach())
 
-        state_trajectory = []
-        action_trajectory = []
-        reward_trajectory = []
-        next_state_trajectory = []
-        done_trajectory = []
+        state = torch.tensor([[states[0]]], dtype=torch.float32, device=device)
+        action = policy_net(state).max(2)[1]
 
-        for _ in range(trajectory_steps):
-            thread_dict["frames_generated"] += 1
+        if random.random() <= thread_dict["epsilon"]:
+            action = torch.tensor([[random.randrange(MeleeEnv.num_actions)]], dtype=torch.long, device=device)
 
-            state = torch.tensor([[states[0]]], dtype=torch.float32, device=device)
-            action = policy_net(state).max(2)[1]
+        actions = [action.item(), 0]
+        next_states, rewards, dones, _ = env.step(actions)
 
-            if action_repeat_count > 0:
-                action = action_to_repeat
-                action_repeat_count -= 1
-            else:
-                if random.random() <= thread_dict["epsilon"]:
-                    action = torch.tensor([[random.randrange(MeleeEnv.num_actions)]], dtype=torch.long, device=device)
-                    action_to_repeat = action
-                    action_repeat_count = random.randrange(12)
+        thread_dict["rewards"].append(rewards[0])
 
-            actions = [action.item(), 0]
-            next_states, rewards, dones, _ = env.step(actions)
+        storage_buffer.add_item((state,
+                                 action.unsqueeze(2),
+                                 torch.tensor([[rewards[0]]], dtype=torch.float32, device=device),
+                                 torch.tensor([[next_states[0]]], dtype=torch.float32, device=device),
+                                 torch.tensor([[dones[0]]], dtype=torch.float32, device=device)))
 
-            thread_dict["rewards"].append(rewards[0])
-
-            state_trajectory.append(state)
-            action_trajectory.append(action.unsqueeze(2))
-            reward_trajectory.append(torch.tensor([[rewards[0]]], dtype=torch.float32, device=device))
-            next_state_trajectory.append(torch.tensor([[next_states[0]]], dtype=torch.float32, device=device))
-            done_trajectory.append(torch.tensor([[dones[0]]], dtype=torch.float32, device=device))
-
-            states = deepcopy(next_states)
-
-        storage_buffer.add_item((torch.cat(state_trajectory, dim=0),
-                                 torch.cat(action_trajectory, dim=0),
-                                 torch.cat(reward_trajectory, dim=0),
-                                 torch.cat(next_state_trajectory, dim=0),
-                                 torch.cat(done_trajectory, dim=0),
-                                 initial_rnn_state))
+        states = deepcopy(next_states)
 
         if len(storage_buffer) > batch_size:
-            batch_of_trajectories = storage_buffer.sample_batch(batch_size)
+            batch_of_frames = storage_buffer.sample_batch(batch_size)
+            state_batch, action_batch, reward_batch, next_state_batch, done_batch = zip(*batch_of_frames)
 
-            output = []
-            for index in range(5):
-                output.append([])
-                for trajectory in batch_of_trajectories:
-                    output[index].append(trajectory[index])
-                output[index] = torch.cat(output[index], dim=1)
-
-            rnn_states = []
-            rnn_cell_states = []
-            for trajectory in batch_of_trajectories:
-                full_state = trajectory[5]
-                rnn_states.append(full_state[0])
-                rnn_cell_states.append(full_state[1])
-
-            batched_rnn_state = (torch.cat(rnn_states, dim=1), torch.cat(rnn_cell_states, dim=1))
-            output.append(batched_rnn_state)
-
-            thread_dict["batches"].append(output)
+            thread_dict["batches"].append((
+                torch.cat(state_batch, dim=1),
+                torch.cat(action_batch, dim=1),
+                torch.cat(reward_batch, dim=1),
+                torch.cat(next_state_batch, dim=1),
+                torch.cat(done_batch, dim=1),
+            ))
 
 
 if __name__ == "__main__":
-    learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate, target_update_frequency=2500//trajectory_steps)
+    learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate, target_update_frequency=2500)
     #learner.load("checkpoints/agent.pth")
 
     generator_thread_dict = {
@@ -125,14 +91,14 @@ if __name__ == "__main__":
         "frames_generated" : 0,
         "rewards" : deque(maxlen=3600),
     }
-    generator_thread = threading.Thread(target=generate_trajectories, args=(0, learner, generator_thread_dict))
+    generator_thread = threading.Thread(target=generate_frames, args=(0, learner, generator_thread_dict))
     generator_thread.start()
 
     learns = 0
     while True:
         while len(generator_thread_dict["batches"]) > 0:
             batch = generator_thread_dict["batches"].pop()
-            learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4], batch[5])
+            learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4])
             learns += 1
 
             if learns % save_every == 0:
