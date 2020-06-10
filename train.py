@@ -27,19 +27,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 learning_rate = 0.0001
 batch_size = 16
-trajectory_steps = 80
-save_every = 20
+trajectory_steps = 60
+save_every = 100
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 80
+epsilon_decay = 300
 
 
 def generate_trajectories(worker_id, learner, thread_dict):
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device=device)
     policy_net.eval()
 
-    storage_buffer = StorageBuffer(32)
+    storage_buffer = StorageBuffer(960)
 
     env = MeleeEnv(worker_id=worker_id, **melee_options)
     states = env.reset()
@@ -49,13 +49,13 @@ def generate_trajectories(worker_id, learner, thread_dict):
 
     while True:
         policy_net.load_state_dict(learner.policy_net.state_dict())
+        initial_rnn_state = (policy_net.rnn_state[0].detach(), policy_net.rnn_state[1].detach())
 
         state_trajectory = []
         action_trajectory = []
         reward_trajectory = []
         next_state_trajectory = []
         done_trajectory = []
-        initial_rnn_state = (policy_net.rnn_state[0].detach(), policy_net.rnn_state[1].detach())
 
         for _ in range(trajectory_steps):
             thread_dict["frames_generated"] += 1
@@ -116,7 +116,7 @@ def generate_trajectories(worker_id, learner, thread_dict):
 
 
 if __name__ == "__main__":
-    learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate)
+    learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate, target_update_frequency=2500//trajectory_steps)
     #learner.load("checkpoints/agent.pth")
 
     generator_thread_dict = {

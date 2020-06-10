@@ -10,29 +10,30 @@ class Policy(nn.Module):
     def __init__(self, input_size, output_size, device):
         super(Policy, self).__init__()
 
-        hidden_size = 512
+        feature_size = 256
+        rnn_hidden_size = 128
+        hidden_size = 64
+        num_rnn_layers = 1
 
         self.features = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+            nn.Linear(input_size, feature_size),
             nn.ReLU(),
         )
 
-        rnn_hidden_size = 128
-        num_rnn_layers = 1
-        self.rnn = nn.LSTM(hidden_size, rnn_hidden_size, num_rnn_layers)
+        self.rnn = nn.LSTM(feature_size, rnn_hidden_size, num_rnn_layers)
         self.rnn_state = (torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device),
                           torch.randn(num_rnn_layers, 1, rnn_hidden_size, device=device))
 
         self.value = nn.Sequential(
-            nn.Linear(128, 128),
+            nn.Linear(rnn_hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(128, 1),
+            nn.Linear(hidden_size, 1),
         )
 
         self.advantage = nn.Sequential(
-            nn.Linear(128, 128),
+            nn.Linear(rnn_hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(128, output_size),
+            nn.Linear(hidden_size, output_size),
         )
 
         self.to(device)
