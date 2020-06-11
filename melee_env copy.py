@@ -93,8 +93,7 @@ class MeleeEnv(object):
     #num_actions = 38
     num_actions = 8
     #observation_size = 856
-    observation_size = 794
-    num_goals = 2
+    observation_size = 792
 
     def __init__(self, **dolphin_options):
         self.dolphin = DolphinAPI(**dolphin_options)
@@ -106,10 +105,7 @@ class MeleeEnv(object):
     def reset(self):
         self._previous_dolphin_state = None
         self._dolphin_state = self.dolphin.reset()
-        observations = []
-        for goal_number in range(self.num_goals):
-            observations.append([self._dolphin_state_to_numpy(0, goal_number), self._dolphin_state_to_numpy(1, goal_number)])
-        return observations
+        return [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
 
     def close(self):
         self.dolphin.close()
@@ -117,13 +113,10 @@ class MeleeEnv(object):
     def step(self, actions):
         self._dolphin_state = self.dolphin.step([_controller_states[actions[0]], _controller_states[actions[1]]])
 
-        observations = []
-        rewards = []
-        dones = []
-        for goal_number in range(self.num_goals):
-            observations.append([self._dolphin_state_to_numpy(0, goal_number), self._dolphin_state_to_numpy(1, goal_number)])
-            rewards.append([self._compute_reward(0, goal_number), self._compute_reward(1, goal_number)])
-            dones.append([self._player_just_died(0), self._player_just_died(1)])
+        observations = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
+        rewards = [self._compute_reward(0), self._compute_reward(1)]
+        dones = [self._player_just_died(0), self._player_just_died(1)]
+        #dones = [False, False]
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
@@ -148,52 +141,82 @@ class MeleeEnv(object):
             state.jumps_used,
         ])
 
-    def _dolphin_state_to_numpy(self, player_perspective, goal_number):
+    def _dolphin_state_to_numpy(self, player_perspective):
         state = self._dolphin_state
         previous_state = self._previous_dolphin_state
-
         if previous_state is not None:
             main_player = self._player_state_to_numpy(state.players[player_perspective], previous_state.players[player_perspective])
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], previous_state.players[1 - player_perspective])
-
         else:
             main_player = self._player_state_to_numpy(state.players[player_perspective], None)
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
+        return np.concatenate((main_player, other_player))
 
-        goal_one_hot = np.array([*one_hot(goal_number, self.num_goals)])
-
-        return np.concatenate((main_player, other_player, goal_one_hot))
+#    def _compute_reward(self, player_perspective):
+#        target_location = 0.0
+#        reward = 1.0 if abs(self._dolphin_state.players[player_perspective].x - target_location) < 5.0 else 0.0
+#        return reward
 
 #    def _compute_reward(self, player_perspective):
 #        target_location = 0.0
 #        reward = max(-1.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - target_location))
 #        return reward
 
-    def _compute_reward(self, player_perspective, goal_number):
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        other_player = 1 - player_perspective
+#
+#        reward = 0.0
+#
+#        reward += min(1.0, 0.003 * self._percent_taken_by_player(other_player))
+#        reward -= min(1.0, 0.003 * self._percent_taken_by_player(main_player))
+#
+#        #if self._player_just_died(other_player):
+#        #    reward = 1.0
+#
+#        if self._player_just_died(main_player):
+#            reward = -1.0
+#
+#        return reward
+
+    def _compute_reward(self, player_perspective):
         main_player = player_perspective
         other_player = 1 - player_perspective
 
         reward = 0.0
 
-        if goal_number == 0:
-            if self._player_just_died(other_player):
-                reward = 1.0
-            if self._player_just_died(main_player):
-                reward = -1.0
+        if self._player_just_died(other_player):
+            reward = 1.0
 
-        elif goal_number == 1:
-            reward += min(1.0, 0.01 * self._percent_taken_by_player(other_player))
-            reward -= min(1.0, 0.01 * self._percent_taken_by_player(main_player))
-
-        #elif goal_number == 2:
-        #    main_x = self._dolphin_state.players[main_player].x
-        #    other_x = self._dolphin_state.players[other_player].x
-        #    main_y = self._dolphin_state.players[main_player].y
-        #    other_y = self._dolphin_state.players[other_player].y
-        #    distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
-        #    reward = np.clip(0.001 * (20.0 - distance), -1.0, 1.0)
+        if self._player_just_died(main_player):
+            reward = -1.0
 
         return reward
+
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        other_player = 1 - player_perspective
+#
+#        reward = 0.0
+#
+#        reward += 0.001 * self._percent_taken_by_player(other_player)
+#        #reward -= 0.01 * self._percent_taken_by_player(main_player)
+#
+#        main_x = self._dolphin_state.players[main_player].x
+#        other_x = self._dolphin_state.players[other_player].x
+#        main_y = self._dolphin_state.players[main_player].y
+#        other_y = self._dolphin_state.players[other_player].y
+#        distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+#
+#        reward += 0.0005 * (20.0 - distance)
+#
+#        #if self._player_just_died(other_player):
+#        #    reward = 1.0
+#
+#        if self._player_just_died(main_player):
+#            reward = -1.0
+#
+#        return reward
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:

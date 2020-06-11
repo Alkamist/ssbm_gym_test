@@ -17,7 +17,7 @@ melee_options = dict(
     render=True,
     speed=0,
     player1='ai',
-    player2='human',
+    player2='cpu',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
@@ -28,11 +28,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 learning_rate = 0.0001
 batch_size = 16
 memory_size = 100000
-save_every = 500
+save_every = 4000
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 1000
+epsilon_decay = 10000
 
 
 def generate_frames(worker_id, learner, thread_dict):
@@ -49,8 +49,9 @@ def generate_frames(worker_id, learner, thread_dict):
 
         policy_net.load_state_dict(learner.policy_net.state_dict())
 
-        state = torch.tensor([[states[0]]], dtype=torch.float32, device=device)
-        action = policy_net(state).max(2)[1]
+        #for goal_number in range(MeleeEnv.num_goals):
+        state_that_causes_action = torch.tensor([[states[0][0]]], dtype=torch.float32, device=device)
+        action = policy_net(state_that_causes_action).max(2)[1]
 
         if random.random() <= thread_dict["epsilon"]:
             action = torch.tensor([[random.randrange(MeleeEnv.num_actions)]], dtype=torch.long, device=device)
@@ -58,15 +59,18 @@ def generate_frames(worker_id, learner, thread_dict):
         actions = [action.item(), 0]
         next_states, rewards, dones, _ = env.step(actions)
 
-        thread_dict["rewards"].append(rewards[0])
-
-        storage_buffer.add_item((state,
-                                 action.unsqueeze(2),
-                                 torch.tensor([[rewards[0]]], dtype=torch.float32, device=device),
-                                 torch.tensor([[next_states[0]]], dtype=torch.float32, device=device),
-                                 torch.tensor([[dones[0]]], dtype=torch.float32, device=device)))
+        for goal_number in range(MeleeEnv.num_goals):
+            storage_buffer.add_item(
+                (torch.tensor([[states[goal_number][0]]], dtype=torch.float32, device=device),
+                 action.unsqueeze(2),
+                 torch.tensor([[rewards[goal_number][0]]], dtype=torch.float32, device=device),
+                 torch.tensor([[next_states[goal_number][0]]], dtype=torch.float32, device=device),
+                 torch.tensor([[dones[goal_number][0]]], dtype=torch.float32, device=device))
+            )
 
         states = deepcopy(next_states)
+
+        thread_dict["rewards"].append(rewards[0])
 
         if len(storage_buffer) > batch_size:
             batch_of_frames = storage_buffer.sample_batch(batch_size)
@@ -102,12 +106,12 @@ if __name__ == "__main__":
             learns += 1
 
             if learns % save_every == 0:
-                #learner.save("checkpoints/agent" + str(learns) + ".pth")
+                learner.save("checkpoints/agent" + str(learns) + ".pth")
                 print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Average Reward {:.4f}".format(
                     generator_thread_dict["frames_generated"],
                     learns,
                     generator_thread_dict["epsilon"],
-                    np.mean(generator_thread_dict["rewards"]),
+                    np.mean(generator_thread_dict["rewards"]) * 1000.0,
                 ))
 
             generator_thread_dict["epsilon"] = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
