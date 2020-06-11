@@ -92,9 +92,8 @@ def one_hot(x, n):
 class MeleeEnv(object):
     #num_actions = 38
     num_actions = 8
-    #observation_size = 856
-    observation_size = 794
-    num_goals = 2
+    num_goals = 3
+    observation_size = 792 + num_goals
 
     def __init__(self, **dolphin_options):
         self.dolphin = DolphinAPI(**dolphin_options)
@@ -106,9 +105,13 @@ class MeleeEnv(object):
     def reset(self):
         self._previous_dolphin_state = None
         self._dolphin_state = self.dolphin.reset()
+
+        numpy_state = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
+
         observations = []
         for goal_number in range(self.num_goals):
-            observations.append([self._dolphin_state_to_numpy(0, goal_number), self._dolphin_state_to_numpy(1, goal_number)])
+            observations.append([self._numpy_state_with_goal(numpy_state[0], goal_number), self._numpy_state_with_goal(numpy_state[1], goal_number)])
+
         return observations
 
     def close(self):
@@ -117,11 +120,13 @@ class MeleeEnv(object):
     def step(self, actions):
         self._dolphin_state = self.dolphin.step([_controller_states[actions[0]], _controller_states[actions[1]]])
 
+        numpy_state = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
+
         observations = []
         rewards = []
         dones = []
         for goal_number in range(self.num_goals):
-            observations.append([self._dolphin_state_to_numpy(0, goal_number), self._dolphin_state_to_numpy(1, goal_number)])
+            observations.append([self._numpy_state_with_goal(numpy_state[0], goal_number), self._numpy_state_with_goal(numpy_state[1], goal_number)])
             rewards.append([self._compute_reward(0, goal_number), self._compute_reward(1, goal_number)])
             dones.append([self._player_just_died(0), self._player_just_died(1)])
 
@@ -148,7 +153,7 @@ class MeleeEnv(object):
             state.jumps_used,
         ])
 
-    def _dolphin_state_to_numpy(self, player_perspective, goal_number):
+    def _dolphin_state_to_numpy(self, player_perspective):
         state = self._dolphin_state
         previous_state = self._previous_dolphin_state
 
@@ -160,9 +165,11 @@ class MeleeEnv(object):
             main_player = self._player_state_to_numpy(state.players[player_perspective], None)
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
 
-        goal_one_hot = np.array([*one_hot(goal_number, self.num_goals)])
+        return np.concatenate((main_player, other_player))
 
-        return np.concatenate((main_player, other_player, goal_one_hot))
+    def _numpy_state_with_goal(self, numpy_state, goal_number):
+        goal_one_hot = np.array([*one_hot(goal_number, self.num_goals)])
+        return np.concatenate((numpy_state, goal_one_hot))
 
 #    def _compute_reward(self, player_perspective):
 #        target_location = 0.0
@@ -175,23 +182,26 @@ class MeleeEnv(object):
 
         reward = 0.0
 
+        # Kill the opponent but don't die.
         if goal_number == 0:
             if self._player_just_died(other_player):
                 reward = 1.0
             if self._player_just_died(main_player):
                 reward = -1.0
 
+        # Put percent on the opponent but don't take percent.
         elif goal_number == 1:
             reward += min(1.0, 0.01 * self._percent_taken_by_player(other_player))
             reward -= min(1.0, 0.01 * self._percent_taken_by_player(main_player))
 
-        #elif goal_number == 2:
-        #    main_x = self._dolphin_state.players[main_player].x
-        #    other_x = self._dolphin_state.players[other_player].x
-        #    main_y = self._dolphin_state.players[main_player].y
-        #    other_y = self._dolphin_state.players[other_player].y
-        #    distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
-        #    reward = np.clip(0.001 * (20.0 - distance), -1.0, 1.0)
+        # Get as close to the opponent as possible.
+        elif goal_number == 2:
+            main_x = self._dolphin_state.players[main_player].x
+            other_x = self._dolphin_state.players[other_player].x
+            main_y = self._dolphin_state.players[main_player].y
+            other_y = self._dolphin_state.players[other_player].y
+            distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+            reward = np.clip(1.0 - (0.02 * distance), -1.0, 1.0)
 
         return reward
 

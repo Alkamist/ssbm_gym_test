@@ -70,7 +70,7 @@ def generate_frames(worker_id, learner, thread_dict):
 
         states = deepcopy(next_states)
 
-        thread_dict["rewards"].append(rewards[0])
+        thread_dict["rewards"].append(rewards[0][0])
 
         if len(storage_buffer) > batch_size:
             batch_of_frames = storage_buffer.sample_batch(batch_size)
