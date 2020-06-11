@@ -49,7 +49,6 @@ def generate_frames(worker_id, learner, thread_dict):
 
         policy_net.load_state_dict(learner.policy_net.state_dict())
 
-        #for goal_number in range(MeleeEnv.num_goals):
         state_that_causes_action = torch.tensor([[states[0][0]]], dtype=torch.float32, device=device)
         action = policy_net(state_that_causes_action).max(2)[1]
 

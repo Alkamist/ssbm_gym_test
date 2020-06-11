@@ -171,11 +171,6 @@ class MeleeEnv(object):
         goal_one_hot = np.array([*one_hot(goal_number, self.num_goals)])
         return np.concatenate((numpy_state, goal_one_hot))
 
-#    def _compute_reward(self, player_perspective):
-#        target_location = 0.0
-#        reward = max(-1.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - target_location))
-#        return reward
-
     def _compute_reward(self, player_perspective, goal_number):
         main_player = player_perspective
         other_player = 1 - player_perspective
