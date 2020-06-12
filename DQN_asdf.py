@@ -6,69 +6,29 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-#class Policy(nn.Module):
-#    def __init__(self, input_size, output_size, device):
-#        super(Policy, self).__init__()
-#
-#        feature_size = 256
-#        hidden_size = 128
-#
-#        self.features = nn.Sequential(
-#            nn.Linear(input_size, feature_size),
-#            nn.ReLU(),
-#        )
-#
-#        self.value = nn.Sequential(
-#            nn.Linear(feature_size, hidden_size),
-#            nn.ReLU(),
-#            nn.Linear(hidden_size, 1),
-#        )
-#
-#        self.advantage = nn.Sequential(
-#            nn.Linear(feature_size, hidden_size),
-#            nn.ReLU(),
-#            nn.Linear(hidden_size, output_size),
-#        )
-#
-#        self.to(device)
-#
-#    def forward(self, state):
-#        features = self.features(state)
-#        values = self.value(features)
-#        advantages = self.advantage(features)
-#        return values + advantages - advantages.mean()
-
-
-class ResidualBlock(nn.Module):
-    """ https://arxiv.org/abs/1806.10909 """
-    def __init__(self, input_size, hidden_size):
-        super(ResidualBlock, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.mlp = nn.Sequential(
-            nn.Linear(self.input_size, self.hidden_size),
-            nn.ReLU(True),
-            nn.Linear(self.hidden_size, self.input_size),
-            nn.ReLU(True),
-        )
-
-    def forward(self, x):
-        return x + self.mlp(x)
-
-
 class Policy(nn.Module):
     def __init__(self, input_size, output_size, device):
         super(Policy, self).__init__()
 
+        feature_size = 256
+        hidden_size = 128
+
         self.features = nn.Sequential(
-            nn.Linear(input_size, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
+            nn.Linear(input_size, feature_size),
             nn.ReLU(),
         )
 
-        self.value = nn.Linear(128, 1)
-        self.advantage = nn.Linear(128, output_size)
+        self.value = nn.Sequential(
+            nn.Linear(feature_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+
+        self.advantage = nn.Sequential(
+            nn.Linear(feature_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+        )
 
         self.to(device)
 
