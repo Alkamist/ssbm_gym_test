@@ -82,8 +82,6 @@ class DQN():
         self.optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_clipping)
-        #for param in self.policy_net.parameters():
-        #    param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
         # Update the target network.

@@ -26,13 +26,13 @@ melee_options = dict(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-trajectory_length = 1
+trajectory_length = 60
 num_workers = 1
 batch_size = 16
-memory_size = 1800
-save_every = 1000
+memory_size = 100000 // trajectory_length
+save_every = 20
 
-gamma = 0.9995
+gamma = 0.9996
 learning_rate = 0.0001
 
 epsilon_start = 1.0
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     thread_dict = {
         "batches" : deque(maxlen=8),
         "frames_generated" : 0,
-        "rewards" : deque(maxlen=int(3600/trajectory_length)),
+        "rewards" : deque(maxlen=3600//trajectory_length),
     }
     batch_thread = threading.Thread(target=prepare_batches, args=(storage_buffer, thread_dict, trajectory_queue))
     batch_thread.start()
