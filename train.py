@@ -26,18 +26,18 @@ melee_options = dict(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-trajectory_length = 5
+trajectory_length = 1
 num_workers = 1
 batch_size = 16
-memory_size = 100000
-save_every = 2000
+memory_size = 1800
+save_every = 1000
 
 gamma = 0.9995
 learning_rate = 0.0001
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 2000
+epsilon_decay = 1000
 
 
 def generate_trajectories(worker_id, shared_state_dict, trajectory_queue, epsilon):
@@ -51,22 +51,28 @@ def generate_trajectories(worker_id, shared_state_dict, trajectory_queue, epsilo
         while True:
             policy_net.load_state_dict(shared_state_dict.state_dict())
 
+            initial_rnn_state = policy_net.rnn_state[0].cpu().detach()
+            initial_rnn_cell = policy_net.rnn_state[1].cpu().detach()
+
             state_trajectory = []
             action_trajectory = []
             reward_trajectory = []
             next_state_trajectory = []
             done_trajectory = []
 
+            average_reward = 0.0
+
             for _ in range(trajectory_length):
                 state = torch.tensor([[states[0]]], dtype=torch.float32, device=device)
+                action = policy_net(state).max(2)[1].cpu()
 
                 if random.random() <= epsilon.value:
                     action = torch.tensor([[random.randrange(MeleeEnv.num_actions)]], dtype=torch.long)
-                else:
-                    action = policy_net(state).max(2)[1].cpu()
 
                 actions = [action.item(), 0]
                 next_states, rewards, dones, _ = env.step(actions)
+
+                average_reward += rewards[0]
 
                 state_trajectory.append(state.cpu())
                 action_trajectory.append(action.unsqueeze(2))
@@ -80,24 +86,30 @@ def generate_trajectories(worker_id, shared_state_dict, trajectory_queue, epsilo
                                   action_trajectory,
                                   reward_trajectory,
                                   next_state_trajectory,
-                                  done_trajectory))
+                                  done_trajectory,
+                                  initial_rnn_state,
+                                  initial_rnn_cell,
+                                  average_reward / trajectory_length))
 
 
 def prepare_batches(storage_buffer, thread_dict, trajectory_queue):
     while True:
         trajectory = trajectory_queue.get()
+
         storage_buffer.add_item((torch.cat(trajectory[0], dim=0).to(device),
                                  torch.cat(trajectory[1], dim=0).to(device),
                                  torch.cat(trajectory[2], dim=0).to(device),
                                  torch.cat(trajectory[3], dim=0).to(device),
-                                 torch.cat(trajectory[4], dim=0).to(device)))
+                                 torch.cat(trajectory[4], dim=0).to(device),
+                                 trajectory[5].to(device),
+                                 trajectory[6].to(device)))
 
         thread_dict["frames_generated"] += trajectory_length
-        #thread_dict["rewards"].append(frame[2])
+        thread_dict["rewards"].append(trajectory[7])
 
         if len(storage_buffer) > batch_size:
-            batch_of_frames = storage_buffer.sample_batch(batch_size)
-            state_batch, action_batch, reward_batch, next_state_batch, done_batch = zip(*batch_of_frames)
+            batch_of_trajectories = storage_buffer.sample_batch(batch_size)
+            state_batch, action_batch, reward_batch, next_state_batch, done_batch, rnn_state_batch, rnn_cell_batch = zip(*batch_of_trajectories)
 
             thread_dict["batches"].append((
                 torch.cat(state_batch, dim=1),
@@ -105,6 +117,8 @@ def prepare_batches(storage_buffer, thread_dict, trajectory_queue):
                 torch.cat(reward_batch, dim=1),
                 torch.cat(next_state_batch, dim=1),
                 torch.cat(done_batch, dim=1),
+                torch.cat(rnn_state_batch, dim=1),
+                torch.cat(rnn_cell_batch, dim=1),
             ))
 
 
@@ -129,7 +143,7 @@ if __name__ == "__main__":
     thread_dict = {
         "batches" : deque(maxlen=8),
         "frames_generated" : 0,
-        "rewards" : deque(maxlen=3600),
+        "rewards" : deque(maxlen=int(3600/trajectory_length)),
     }
     batch_thread = threading.Thread(target=prepare_batches, args=(storage_buffer, thread_dict, trajectory_queue))
     batch_thread.start()
@@ -138,7 +152,7 @@ if __name__ == "__main__":
     while True:
         while len(thread_dict["batches"]) > 0:
             batch = thread_dict["batches"].pop()
-            learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4])
+            learner.learn(*batch)
             learns += 1
 
             shared_state_dict.load_state_dict(learner.policy_net.state_dict())
