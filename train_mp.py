@@ -26,7 +26,6 @@ melee_options = dict(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-trajectory_length = 5
 num_workers = 1
 batch_size = 16
 memory_size = 100000
@@ -37,10 +36,10 @@ learning_rate = 0.0001
 
 epsilon_start = 1.0
 epsilon_end = 0.01
-epsilon_decay = 2000
+epsilon_decay = 5000
 
 
-def generate_trajectories(worker_id, shared_state_dict, trajectory_queue, epsilon):
+def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
     policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device=device)
     policy_net.eval()
 
@@ -51,49 +50,35 @@ def generate_trajectories(worker_id, shared_state_dict, trajectory_queue, epsilo
         while True:
             policy_net.load_state_dict(shared_state_dict.state_dict())
 
-            state_trajectory = []
-            action_trajectory = []
-            reward_trajectory = []
-            next_state_trajectory = []
-            done_trajectory = []
-
-            for _ in range(trajectory_length):
+            if random.random() <= epsilon.value:
+                action = random.randrange(MeleeEnv.num_actions)
+            else:
                 state = torch.tensor([[states[0]]], dtype=torch.float32, device=device)
+                action = policy_net(state).max(2)[1].item()
 
-                if random.random() <= epsilon.value:
-                    action = torch.tensor([[random.randrange(MeleeEnv.num_actions)]], dtype=torch.long)
-                else:
-                    action = policy_net(state).max(2)[1].cpu()
+            actions = [action, 0]
+            next_states, rewards, dones, _ = env.step(actions)
 
-                actions = [action.item(), 0]
-                next_states, rewards, dones, _ = env.step(actions)
+            frame_queue.put((states[0],
+                             action,
+                             rewards[0],
+                             next_states[0],
+                             dones[0]))
 
-                state_trajectory.append(state.cpu())
-                action_trajectory.append(action.unsqueeze(2))
-                reward_trajectory.append(torch.tensor([[rewards[0]]], dtype=torch.float32))
-                next_state_trajectory.append(torch.tensor([[next_states[0]]], dtype=torch.float32))
-                done_trajectory.append(torch.tensor([[dones[0]]], dtype=torch.float32))
-
-                states = deepcopy(next_states)
-
-            trajectory_queue.put((state_trajectory,
-                                  action_trajectory,
-                                  reward_trajectory,
-                                  next_state_trajectory,
-                                  done_trajectory))
+            states = deepcopy(next_states)
 
 
-def prepare_batches(storage_buffer, thread_dict, trajectory_queue):
+def prepare_batches(storage_buffer, thread_dict, frame_queue):
     while True:
-        trajectory = trajectory_queue.get()
-        storage_buffer.add_item((torch.cat(trajectory[0], dim=0).to(device),
-                                 torch.cat(trajectory[1], dim=0).to(device),
-                                 torch.cat(trajectory[2], dim=0).to(device),
-                                 torch.cat(trajectory[3], dim=0).to(device),
-                                 torch.cat(trajectory[4], dim=0).to(device)))
+        frame = frame_queue.get()
+        storage_buffer.add_item((torch.tensor([[frame[0]]], dtype=torch.float32, device=device),
+                                 torch.tensor([[[frame[1]]]], dtype=torch.long, device=device),
+                                 torch.tensor([[frame[2]]], dtype=torch.float32, device=device),
+                                 torch.tensor([[frame[3]]], dtype=torch.float32, device=device),
+                                 torch.tensor([[frame[4]]], dtype=torch.float32, device=device)))
 
-        thread_dict["frames_generated"] += trajectory_length
-        #thread_dict["rewards"].append(frame[2])
+        thread_dict["frames_generated"] += 1
+        thread_dict["rewards"].append(frame[2])
 
         if len(storage_buffer) > batch_size:
             batch_of_frames = storage_buffer.sample_batch(batch_size)
@@ -117,12 +102,12 @@ if __name__ == "__main__":
     shared_state_dict.share_memory()
 
     storage_buffer = StorageBuffer(memory_size)
-    trajectory_queue = mp.Queue(maxsize=1)
+    frame_queue = mp.Queue(maxsize=1)
     epsilon = mp.Value("d", epsilon_start)
 
     generator_processes = []
     for worker_id in range(num_workers):
-        p = mp.Process(target=generate_trajectories, args=(worker_id, shared_state_dict, trajectory_queue, epsilon))
+        p = mp.Process(target=generate_frames, args=(worker_id, shared_state_dict, frame_queue, epsilon))
         p.start()
         generator_processes.append(p)
 
@@ -131,7 +116,7 @@ if __name__ == "__main__":
         "frames_generated" : 0,
         "rewards" : deque(maxlen=3600),
     }
-    batch_thread = threading.Thread(target=prepare_batches, args=(storage_buffer, thread_dict, trajectory_queue))
+    batch_thread = threading.Thread(target=prepare_batches, args=(storage_buffer, thread_dict, frame_queue))
     batch_thread.start()
 
     learns = 0
