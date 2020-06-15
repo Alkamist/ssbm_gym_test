@@ -16,55 +16,62 @@ num_characters = 32
 
 
 NONE_stick = [
-    #(0.5, 0.5), # Middle
-    #(0.5, 0.0), # Down
+    #(0.5, 0.5), # Center
     #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    #(0.35, 0.5), # Walk left
-    #(0.65, 0.5), # Walk right
+    #(0.65, 0.5), # Tilt Right
+    #(0.35, 0.5), # Tilt Left
 ]
 A_stick = [
-    #(0.5, 0.5), # Middle
-    #(0.5, 0.0), # Down
+    #(0.5, 0.5), # Center
     #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
     #(1.0, 0.5), # Right
     #(0.0, 0.5), # Left
-    #(0.35, 0.5), # Left tilt
-    #(0.65, 0.5), # Right tilt
-    #(0.5, 0.35), # Down tilt
-    #(0.5, 0.65), # Up tilt
+    #(1.0, 1.0), # Up Right
+    #(0.0, 1.0), # Up Left
+    #(1.0, 0.0), # Down Right
+    #(0.0, 0.0), # Down Left
+    #(0.5, 0.65), # Tilt Up
+    #(0.5, 0.35), # Tilt Down
+    #(0.65, 0.5), # Tilt Right
+    #(0.35, 0.5), # Tilt Left
+    #(0.65, 0.65), # Tilt Up Right
+    #(0.35, 0.65), # Tilt Up Left
+    #(0.65, 0.35), # Tilt Down Right
+    #(0.35, 0.35), # Tilt Down Left
 ]
 B_stick = [
-    #(0.5, 0.5), # Middle
-    #(0.5, 0.0), # Down
+    #(0.5, 0.5), # Center
     #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
     #(1.0, 0.5), # Right
     #(0.0, 0.5), # Left
 ]
 Z_stick = [
-    #(0.5, 0.5), # Middle
-    #(0.5, 0.0), # Down
-    #(0.5, 1.0), # Up
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
+    #(0.5, 0.5), # Center
 ]
 Y_stick = [
-    #(0.5, 0.5), # Middle
     #(0.5, 0.0), # Down
-    #(0.5, 1.0), # Up
     #(1.0, 0.5), # Right
     #(0.0, 0.5), # Left
 ]
 L_stick = [
-    #(0.5, 0.5), # Middle
-    #(0.5, 0.0), # Down
+    #(0.5, 0.5), # Center
     #(0.5, 1.0), # Up
+    #(0.5, 0.1625), # Down / Shield Drop (I think?)
     #(1.0, 0.5), # Right
     #(0.0, 0.5), # Left
-    #(0.075, 0.25), # Wavedash left full
-    #(0.925, 0.25), # Wavedash right full
+    #(1.0, 1.0), # Up Right
+    #(0.0, 1.0), # Up Left
+    #(1.0, 0.0), # Down Right
+    #(0.0, 0.0), # Down Left
+    #(0.925, 0.25), # Airdodge Down Right Full
+    #(0.075, 0.25), # Airdodge Down Left Full
 ]
+
 
 _controller = []
 for button, stick in enumerate([NONE_stick, A_stick, B_stick, Z_stick, Y_stick, L_stick]):
@@ -90,9 +97,8 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    #num_actions = 38
+    #num_actions = 44
     num_actions = 2
-    #observation_size = 856
     observation_size = 792
 
     def __init__(self, **dolphin_options):
@@ -115,12 +121,17 @@ class MeleeEnv(object):
 
         observations = [self._dolphin_state_to_numpy(0), self._dolphin_state_to_numpy(1)]
         rewards = [self._compute_reward(0), self._compute_reward(1)]
-        dones = [self._player_just_died(0), self._player_just_died(1)]
-        #dones = [False, False]
+        dones = [self._compute_done(0), self._compute_done(1)]
+
+        score = 0.0
+        if self._player_just_died(1):
+            score = 1.0
+        if self._player_just_died(0):
+            score = -1.0
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
 
-        return observations, rewards, dones, {}
+        return observations, rewards, dones, score
 
     def _player_state_to_numpy(self, state, previous_state):
         return np.array([
@@ -153,31 +164,34 @@ class MeleeEnv(object):
         return np.concatenate((main_player, other_player))
 
     def _compute_reward(self, player_perspective):
-        target_location = 0.0
-        reward = max(0.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - target_location))
-        return reward
+        return max(-1.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - 0.0))
 
-#    def _compute_reward(self, player_perspective):
-#        reward = 0.0
-#
-#        if self._player_just_died(1 - player_perspective):
-#            reward = 1.0
-#
-#        return reward
+    def _compute_done(self, player_perspective):
+        return False
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective
 #        other_player = 1 - player_perspective
 #
-#        reward = 0.0
+#        reward = 0.00001
+#
+#        #main_x = self._dolphin_state.players[main_player].x
+#        #other_x = self._dolphin_state.players[other_player].x
+#        #main_y = self._dolphin_state.players[main_player].y
+#        #other_y = self._dolphin_state.players[other_player].y
+#        #distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+#        #reward = max(-1.0, -0.0001 * distance)
+#
+#        #reward += min(1.0, 0.01 * self._percent_taken_by_player(other_player))
 #
 #        if self._player_just_died(other_player):
 #            reward = 1.0
 #
-#        if self._player_just_died(main_player):
-#            reward = -1.0
-#
+#        #return np.clip(reward, -1.0, 1.0)
 #        return reward
+
+#    def _compute_done(self, player_perspective):
+#        return self._player_just_died(player_perspective)
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:

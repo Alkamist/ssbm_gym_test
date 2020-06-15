@@ -16,11 +16,6 @@ class Policy(nn.Module):
             nn.Linear(512, 256),
         )
 
-        num_rnn_layers = 1
-        self.rnn = nn.LSTM(256, 256, num_rnn_layers)
-        self.rnn_state = (torch.randn(num_rnn_layers, 1, 256, device=device),
-                          torch.randn(num_rnn_layers, 1, 256, device=device))
-
         self.value = nn.Linear(256, 1)
         self.advantage = nn.Linear(256, output_size)
 
@@ -28,9 +23,8 @@ class Policy(nn.Module):
 
     def forward(self, state):
         features = self.features(state)
-        rnn_output, self.rnn_state = self.rnn(features, self.rnn_state)
-        values = self.value(rnn_output)
-        advantages = self.advantage(rnn_output)
+        values = self.value(features)
+        advantages = self.advantage(features)
         return values + advantages - advantages.mean()
 
 
@@ -64,16 +58,12 @@ class DQN():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones, rnn_state, rnn_cell_state):
+    def learn(self, states, actions, rewards, next_states, dones):
         self.policy_net.train()
         self.target_net.eval()
 
-        full_rnn_state = (rnn_state, rnn_cell_state)
-        self.policy_net.rnn_state = full_rnn_state
-        self.target_net.rnn_state = full_rnn_state
-
-        state_action_values = self.policy_net(states).gather(2, actions).squeeze(2)
-        next_state_values = self.target_net(next_states).max(2)[0].detach()
+        state_action_values = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        next_state_values = self.target_net(next_states).max(1)[0].detach()
 
         expected_state_action_values = rewards + (next_state_values * self.gamma) * (1.0 - dones)
 
@@ -81,7 +71,9 @@ class DQN():
 
         self.optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_clipping)
+        #nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_clipping)
+        for param in self.policy_net.parameters():
+            param.grad.data.clamp_(-1.0, 1.0)
         self.optimizer.step()
 
         # Update the target network.
