@@ -11,7 +11,8 @@ import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from storage_buffer import StorageBuffer
-from DQN_IQN import DQN, Policy
+from IQN import DQNLearner, DQN
+#from DQN import DQNLearner, DQN
 
 
 melee_options = dict(
@@ -31,8 +32,11 @@ batch_size = 16
 memory_size = 100000
 save_every = 500
 
+hidden_size = 512
 gamma = 0.997
 learning_rate = 0.0001
+grad_norm_clipping = 5.0
+target_update_frequency=2500
 use_dueling_net = True
 
 epsilon_start = 1.0
@@ -41,12 +45,12 @@ epsilon_decay = 2000
 
 
 def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
-    policy_net = Policy(
+    policy_net = DQN(
         input_size=MeleeEnv.observation_size,
         output_size=MeleeEnv.num_actions,
-        device=device,
+        hidden_size=hidden_size,
         use_dueling_net=use_dueling_net,
-    )
+    ).to(device)
     policy_net.eval()
 
     env = MeleeEnv(worker_id=worker_id, **melee_options)
@@ -117,21 +121,24 @@ def prepare_batches(storage_buffer, thread_dict, frame_queue):
 
 
 if __name__ == "__main__":
-    learner = DQN(
+    learner = DQNLearner(
         state_size=MeleeEnv.observation_size,
         action_size=MeleeEnv.num_actions,
+        hidden_size=hidden_size,
         batch_size=batch_size,
         device=device,
-        lr=learning_rate,
+        learning_rate=learning_rate,
         gamma=gamma,
+        grad_norm_clipping=grad_norm_clipping,
+        target_update_frequency=target_update_frequency,
         use_dueling_net=use_dueling_net,
     )
     #learner.load("checkpoints/agent.pth")
 
-    shared_state_dict = Policy(
+    shared_state_dict = DQN(
         input_size=MeleeEnv.observation_size,
         output_size=MeleeEnv.num_actions,
-        device="cpu",
+        hidden_size=hidden_size,
         use_dueling_net=use_dueling_net,
     )
     shared_state_dict.load_state_dict(learner.policy_net.state_dict())

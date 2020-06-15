@@ -1,6 +1,3 @@
-import math
-import random
-
 import numpy as np
 
 import torch
@@ -67,15 +64,16 @@ def calculate_quantile_huber_loss(td_errors, taus, weights=None, kappa=1.0):
 
 
 class CosineEmbeddingNetwork(nn.Module):
-    def __init__(self, output_size, num_cosines=64):
+    def __init__(self, output_size, num_cosines):
         super(CosineEmbeddingNetwork, self).__init__()
 
+        self.output_size = output_size
+        self.num_cosines = num_cosines
+
         self.net = nn.Sequential(
-            nn.Linear(num_cosines, output_size),
+            nn.Linear(self.num_cosines, self.output_size),
             nn.ReLU()
         )
-        self.num_cosines = num_cosines
-        self.output_size = output_size
 
     def forward(self, taus):
         batch_size = taus.shape[0]
@@ -94,30 +92,31 @@ class CosineEmbeddingNetwork(nn.Module):
 
 
 class QuantileNetwork(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, use_dueling_net=False):
+    def __init__(self, input_size, output_size, hidden_size, use_dueling_net):
         super(QuantileNetwork, self).__init__()
 
-        if not use_dueling_net:
-            self.net = nn.Sequential(
-                nn.Linear(input_size, hidden_size),
-                nn.ReLU(),
-                nn.Linear(hidden_size, output_size),
-            )
-        else:
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.use_dueling_net = use_dueling_net
+
+        if self.use_dueling_net:
             self.advantage_net = nn.Sequential(
-                nn.Linear(input_size, hidden_size),
+                nn.Linear(self.input_size, self.hidden_size),
                 nn.ReLU(),
-                nn.Linear(hidden_size, output_size),
+                nn.Linear(self.hidden_size, self.output_size),
             )
             self.baseline_net = nn.Sequential(
-                nn.Linear(input_size, hidden_size),
+                nn.Linear(self.input_size, self.hidden_size),
                 nn.ReLU(),
-                nn.Linear(hidden_size, 1),
+                nn.Linear(self.hidden_size, 1),
             )
-
-        self.output_size = output_size
-        self.input_size = input_size
-        self.use_dueling_net = use_dueling_net
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(self.input_size, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.output_size),
+            )
 
     def forward(self, state_embeddings, tau_embeddings):
         assert state_embeddings.shape[0] == tau_embeddings.shape[0]
@@ -135,47 +134,44 @@ class QuantileNetwork(nn.Module):
         embeddings = (state_embeddings * tau_embeddings).view(batch_size * N, self.input_size)
 
         # Calculate quantile values.
-        if not self.use_dueling_net:
-            quantiles = self.net(embeddings)
-        else:
+        if self.use_dueling_net:
             advantages = self.advantage_net(embeddings)
             baselines = self.baseline_net(embeddings)
             quantiles = baselines + advantages - advantages.mean(1, keepdim=True)
+        else:
+            quantiles = self.net(embeddings)
 
         return quantiles.view(batch_size, N, self.output_size)
 
 
-class Policy(nn.Module):
-    def __init__(self, input_size, output_size, device, K=32, use_dueling_net=False):
-        super(Policy, self).__init__()
+class DQN(nn.Module):
+    def __init__(self, input_size, output_size, hidden_size, use_dueling_net):
+        super(DQN, self).__init__()
 
-        self.K = K
+        self.K = 32
+        self.num_cosines = 64
 
-        self.embedding_size = 512
-        self.hidden_size = 512
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
 
         self.feature_net = nn.Sequential(
-            nn.Linear(input_size, self.hidden_size),
+            nn.Linear(self.input_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.embedding_size),
+            nn.Linear(self.hidden_size, self.hidden_size),
         ).apply(initialize_weights_he)
 
         self.cosine_net = CosineEmbeddingNetwork(
-            output_size=self.embedding_size,
-            num_cosines=64,
+            output_size=self.hidden_size,
+            num_cosines=self.num_cosines,
         )
 
         self.quantile_net = QuantileNetwork(
-            input_size=self.embedding_size,
-            output_size=output_size,
+            input_size=self.hidden_size,
+            output_size=self.output_size,
             hidden_size=self.hidden_size,
             use_dueling_net=use_dueling_net,
         )
-
-        self.K = K
-        self.output_size = output_size
-
-        self.to(device)
 
     def calculate_quantiles(self, taus, states=None, state_embeddings=None):
         assert states is not None or state_embeddings is not None
@@ -207,39 +203,40 @@ class Policy(nn.Module):
         return q
 
 
-class DQN():
-    def __init__(self, state_size, action_size, batch_size, device, lr=3e-5, gamma=0.997,
-                 grad_norm_clipping=5.0, target_update_frequency=2500, use_dueling_net=False):
+class DQNLearner():
+    def __init__(self, state_size, action_size, hidden_size, batch_size, device, learning_rate,
+                 gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
         self.N = 64
         self.N_dash = 64
         self.kappa = 1.0
 
         self.state_size = state_size
         self.action_size = action_size
+        self.hidden_size = hidden_size
         self.batch_size = batch_size
-        self.lr = lr
+        self.learning_rate = learning_rate
         self.gamma = gamma
         self.grad_norm_clipping = grad_norm_clipping
         self.device = device
 
-        self.policy_net = Policy(
+        self.policy_net = DQN(
             input_size=state_size,
             output_size=action_size,
-            device=self.device,
+            hidden_size=self.hidden_size,
             use_dueling_net=use_dueling_net,
-        )
+        ).to(self.device)
         self.policy_net.train()
 
-        self.target_net = Policy(
+        self.target_net = DQN(
             input_size=state_size,
             output_size=action_size,
-            device=self.device,
+            hidden_size=self.hidden_size,
             use_dueling_net=use_dueling_net,
-        )
+        ).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         self.target_update_frequency = target_update_frequency
         self.learn_iterations = 0
 
@@ -254,7 +251,7 @@ class DQN():
         state_embeddings = self.policy_net.feature_net(states)
         weights = None
 
-        loss, _, _ = self.calculate_loss(state_embeddings, actions, rewards, next_states, dones, weights)
+        loss, _, _ = self._calculate_loss(state_embeddings, actions, rewards, next_states, dones, weights)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -267,7 +264,7 @@ class DQN():
 
         self.learn_iterations += 1
 
-    def calculate_loss(self, state_embeddings, actions, rewards, next_states, dones, weights):
+    def _calculate_loss(self, state_embeddings, actions, rewards, next_states, dones, weights):
         # Sample fractions.
         taus = torch.rand(self.batch_size, self.N, dtype=state_embeddings.dtype, device=state_embeddings.device)
 

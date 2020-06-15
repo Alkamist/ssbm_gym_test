@@ -6,41 +6,96 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-class Policy(nn.Module):
-    def __init__(self, input_size, output_size, device):
-        super(Policy, self).__init__()
+def initialize_weights_xavier(m, gain=1.0):
+    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+        torch.nn.init.xavier_uniform_(m.weight, gain=gain)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
 
-        self.features = nn.Sequential(
-            nn.Linear(input_size, 512),
+
+def initialize_weights_he(m):
+    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+        torch.nn.init.kaiming_uniform_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+
+
+class DQN(nn.Module):
+    def __init__(self, input_size, output_size, hidden_size, use_dueling_net):
+        super(DQN, self).__init__()
+
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.use_dueling_net = use_dueling_net
+
+        self.feature_net = nn.Sequential(
+            nn.Linear(self.input_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(512, 256),
-        )
+            nn.Linear(self.hidden_size, self.hidden_size),
+        ).apply(initialize_weights_he)
 
-        self.value = nn.Linear(256, 1)
-        self.advantage = nn.Linear(256, output_size)
-
-        self.to(device)
+        if self.use_dueling_net:
+            self.advantage_net = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.output_size),
+            )
+            self.baseline_net = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, 1),
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.output_size),
+            )
 
     def forward(self, state):
-        features = self.features(state)
-        values = self.value(features)
-        advantages = self.advantage(features)
-        return values + advantages - advantages.mean()
+        features = self.feature_net(state)
+
+        if self.use_dueling_net:
+            baselines = self.baseline_net(features)
+            advantages = self.advantage_net(features)
+            output = baselines + advantages - advantages.mean()
+        else:
+            output = self.net(features)
+
+        return output
 
 
-class DQN():
-    def __init__(self, state_size, action_size, batch_size, device, lr=3e-5, gamma=0.997, grad_norm_clipping=40.0, target_update_frequency=2500):
+class DQNLearner():
+    def __init__(self, state_size, action_size, hidden_size, batch_size, device, learning_rate,
+                 gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
         self.state_size = state_size
         self.action_size = action_size
+        self.hidden_size = hidden_size
         self.batch_size = batch_size
-        self.lr = lr
+        self.learning_rate = learning_rate
         self.gamma = gamma
         self.grad_norm_clipping = grad_norm_clipping
         self.device = device
-        self.policy_net = Policy(state_size, action_size, device=self.device)
-        self.target_net = Policy(state_size, action_size, device=self.device)
+
+        self.policy_net = DQN(
+            input_size=self.state_size,
+            output_size=self.action_size,
+            hidden_size=self.hidden_size,
+            use_dueling_net=use_dueling_net,
+        ).to(self.device)
+        self.policy_net.train()
+
+        self.target_net = DQN(
+            input_size=self.state_size,
+            output_size=self.action_size,
+            hidden_size=self.hidden_size,
+            use_dueling_net=use_dueling_net,
+        ).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.target_net.eval()
+
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         self.loss_criterion = torch.nn.SmoothL1Loss()
         self.target_update_frequency = target_update_frequency
         self.learn_iterations = 0
@@ -59,21 +114,16 @@ class DQN():
         self.policy_net.train()
 
     def learn(self, states, actions, rewards, next_states, dones):
-        self.policy_net.train()
-        self.target_net.eval()
-
-        state_action_values = self.policy_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        state_action_values = self.policy_net(states).gather(1, actions).squeeze(1)
         next_state_values = self.target_net(next_states).max(1)[0].detach()
 
-        expected_state_action_values = rewards + (next_state_values * self.gamma) * (1.0 - dones)
+        expected_state_action_values = rewards.squeeze(1) + (next_state_values * self.gamma) * (1.0 - dones.squeeze(1))
 
         loss = self.loss_criterion(state_action_values, expected_state_action_values)
 
         self.optimizer.zero_grad()
         loss.backward()
-        #nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_clipping)
-        for param in self.policy_net.parameters():
-            param.grad.data.clamp_(-1.0, 1.0)
+        nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_clipping)
         self.optimizer.step()
 
         # Update the target network.
