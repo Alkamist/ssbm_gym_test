@@ -11,7 +11,7 @@ import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
 from storage_buffer import StorageBuffer
-from DQN import DQN, Policy
+from DQN_IQN import DQN, Policy
 
 
 melee_options = dict(
@@ -33,6 +33,7 @@ save_every = 500
 
 gamma = 0.997
 learning_rate = 0.0001
+use_dueling_net = True
 
 epsilon_start = 1.0
 epsilon_end = 0.01
@@ -40,36 +41,41 @@ epsilon_decay = 2000
 
 
 def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
-    policy_net = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device=device)
+    policy_net = Policy(
+        input_size=MeleeEnv.observation_size,
+        output_size=MeleeEnv.num_actions,
+        device=device,
+        use_dueling_net=use_dueling_net,
+    )
     policy_net.eval()
 
     env = MeleeEnv(worker_id=worker_id, **melee_options)
     states = env.reset()
 
-    action_to_repeat = 0
-    action_repeat_count = 0
+    #action_to_repeat = 0
+    #action_repeat_count = 0
 
     with torch.no_grad():
         while True:
             policy_net.load_state_dict(shared_state_dict.state_dict())
 
-            if action_repeat_count > 0:
-                action = action_to_repeat
-                action_repeat_count -= 1
-            else:
-                if random.random() <= epsilon.value:
-                    action = random.randrange(MeleeEnv.num_actions)
-                    action_to_repeat = action
-                    action_repeat_count = random.randrange(8)
-                else:
-                    state = torch.tensor([states[0]], dtype=torch.float32, device=device)
-                    action = policy_net(state).max(1)[1].item()
-
-            #if random.random() <= epsilon.value:
-            #    action = random.randrange(MeleeEnv.num_actions)
+            #if action_repeat_count > 0:
+            #    action = action_to_repeat
+            #    action_repeat_count -= 1
             #else:
-            #    state = torch.tensor([states[0]], dtype=torch.float32, device=device)
-            #    action = policy_net(state).max(1)[1].item()
+            #    if random.random() <= epsilon.value:
+            #        action = random.randrange(MeleeEnv.num_actions)
+            #        action_to_repeat = action
+            #        action_repeat_count = random.randrange(8)
+            #    else:
+            #        state = torch.tensor([states[0]], dtype=torch.float32, device=device)
+            #        action = policy_net(state).max(1)[1].item()
+
+            if random.random() <= epsilon.value:
+                action = random.randrange(MeleeEnv.num_actions)
+            else:
+                state = torch.tensor([states[0]], dtype=torch.float32, device=device)
+                action = policy_net(state).max(1)[1].item()
 
             actions = [action, 0]
             next_states, rewards, dones, score = env.step(actions)
@@ -89,10 +95,10 @@ def prepare_batches(storage_buffer, thread_dict, frame_queue):
         frame = frame_queue.get()
 
         storage_buffer.add_item((torch.tensor([frame[0]], dtype=torch.float32, device=device),
-                                 torch.tensor([frame[1]], dtype=torch.long, device=device),
-                                 torch.tensor([frame[2]], dtype=torch.float32, device=device),
+                                 torch.tensor([[frame[1]]], dtype=torch.long, device=device),
+                                 torch.tensor([[frame[2]]], dtype=torch.float32, device=device),
                                  torch.tensor([frame[3]], dtype=torch.float32, device=device),
-                                 torch.tensor([frame[4]], dtype=torch.float32, device=device)))
+                                 torch.tensor([[frame[4]]], dtype=torch.float32, device=device)))
 
         thread_dict["frames_generated"] += 1
         thread_dict["score"].append(frame[5])
@@ -111,10 +117,23 @@ def prepare_batches(storage_buffer, thread_dict, frame_queue):
 
 
 if __name__ == "__main__":
-    learner = DQN(MeleeEnv.observation_size, MeleeEnv.num_actions, batch_size, device, lr=learning_rate, gamma=gamma)
+    learner = DQN(
+        state_size=MeleeEnv.observation_size,
+        action_size=MeleeEnv.num_actions,
+        batch_size=batch_size,
+        device=device,
+        lr=learning_rate,
+        gamma=gamma,
+        use_dueling_net=use_dueling_net,
+    )
     #learner.load("checkpoints/agent.pth")
 
-    shared_state_dict = Policy(MeleeEnv.observation_size, MeleeEnv.num_actions, device="cpu")
+    shared_state_dict = Policy(
+        input_size=MeleeEnv.observation_size,
+        output_size=MeleeEnv.num_actions,
+        device="cpu",
+        use_dueling_net=use_dueling_net,
+    )
     shared_state_dict.load_state_dict(learner.policy_net.state_dict())
     shared_state_dict.share_memory()
 
