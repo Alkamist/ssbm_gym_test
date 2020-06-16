@@ -204,8 +204,8 @@ class DQN(nn.Module):
 
 
 class DQNLearner():
-    def __init__(self, state_size, action_size, hidden_size, batch_size, device, learning_rate,
-                 gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
+    def __init__(self, state_size, action_size, hidden_size, batch_size, n_step_size, device,
+                 learning_rate, gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
         self.N = 64
         self.N_dash = 64
         self.kappa = 1.0
@@ -215,7 +215,9 @@ class DQNLearner():
         self.hidden_size = hidden_size
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        self.n_step_size = n_step_size
         self.gamma = gamma
+        self.gamma_n = self.gamma ** self.n_step_size
         self.grad_norm_clipping = grad_norm_clipping
         self.device = device
 
@@ -291,7 +293,7 @@ class DQNLearner():
             assert next_sa_quantiles.shape == (self.batch_size, 1, self.N_dash)
 
             # Calculate target quantile values.
-            target_sa_quantiles = rewards[..., None] + (1.0 - dones[..., None]) * self.gamma * next_sa_quantiles
+            target_sa_quantiles = rewards[..., None] + (1.0 - dones[..., None]) * self.gamma_n * next_sa_quantiles
             assert target_sa_quantiles.shape == (self.batch_size, 1, self.N_dash)
 
         td_errors = target_sa_quantiles - current_sa_quantiles

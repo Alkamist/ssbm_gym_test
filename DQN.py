@@ -67,14 +67,16 @@ class DQN(nn.Module):
 
 
 class DQNLearner():
-    def __init__(self, state_size, action_size, hidden_size, batch_size, device, learning_rate,
-                 gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
+    def __init__(self, state_size, action_size, hidden_size, batch_size, n_step_size, device,
+                 learning_rate, gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
         self.state_size = state_size
         self.action_size = action_size
         self.hidden_size = hidden_size
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        self.n_step_size = n_step_size
         self.gamma = gamma
+        self.gamma_n = self.gamma ** self.n_step_size
         self.grad_norm_clipping = grad_norm_clipping
         self.device = device
 
@@ -117,7 +119,7 @@ class DQNLearner():
         state_action_values = self.policy_net(states).gather(1, actions).squeeze(1)
         next_state_values = self.target_net(next_states).max(1)[0].detach()
 
-        expected_state_action_values = rewards.squeeze(1) + (next_state_values * self.gamma) * (1.0 - dones.squeeze(1))
+        expected_state_action_values = rewards.squeeze(1) + (next_state_values * self.gamma_n) * (1.0 - dones.squeeze(1))
 
         loss = self.loss_criterion(state_action_values, expected_state_action_values)
 
