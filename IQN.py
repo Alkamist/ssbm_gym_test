@@ -249,11 +249,10 @@ class DQNLearner():
         self.policy_net.load_state_dict(torch.load(file_path))
         self.target_net.load_state_dict(torch.load(file_path))
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, weights):
         state_embeddings = self.policy_net.feature_net(states)
-        weights = None
 
-        loss, _, _ = self._calculate_loss(state_embeddings, actions, rewards, next_states, dones, weights)
+        loss, errors = self._calculate_loss(state_embeddings, actions, rewards, next_states, dones, weights)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -265,6 +264,8 @@ class DQNLearner():
             self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.learn_iterations += 1
+
+        return errors
 
     def _calculate_loss(self, state_embeddings, actions, rewards, next_states, dones, weights):
         # Sample fractions.
@@ -301,4 +302,4 @@ class DQNLearner():
 
         quantile_huber_loss = calculate_quantile_huber_loss(td_errors, taus, weights, self.kappa)
 
-        return quantile_huber_loss, next_q.detach().mean().item(), td_errors.detach().abs()
+        return quantile_huber_loss, td_errors.detach().abs().cpu().numpy().flatten()

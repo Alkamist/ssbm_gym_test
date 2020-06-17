@@ -16,60 +16,60 @@ num_characters = 32
 
 
 NONE_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    #(0.65, 0.5), # Tilt Right
-    #(0.35, 0.5), # Tilt Left
+    (0.65, 0.5), # Tilt Right
+    (0.35, 0.5), # Tilt Left
 ]
 A_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
-    #(1.0, 1.0), # Up Right
-    #(0.0, 1.0), # Up Left
-    #(1.0, 0.0), # Down Right
-    #(0.0, 0.0), # Down Left
-    #(0.5, 0.65), # Tilt Up
-    #(0.5, 0.35), # Tilt Down
-    #(0.65, 0.5), # Tilt Right
-    #(0.35, 0.5), # Tilt Left
-    #(0.65, 0.65), # Tilt Up Right
-    #(0.35, 0.65), # Tilt Up Left
-    #(0.65, 0.35), # Tilt Down Right
-    #(0.35, 0.35), # Tilt Down Left
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
+    (1.0, 1.0), # Up Right
+    (0.0, 1.0), # Up Left
+    (1.0, 0.0), # Down Right
+    (0.0, 0.0), # Down Left
+    (0.5, 0.65), # Tilt Up
+    (0.5, 0.35), # Tilt Down
+    (0.65, 0.5), # Tilt Right
+    (0.35, 0.5), # Tilt Left
+    (0.65, 0.65), # Tilt Up Right
+    (0.35, 0.65), # Tilt Up Left
+    (0.65, 0.35), # Tilt Down Right
+    (0.35, 0.35), # Tilt Down Left
 ]
 B_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
 ]
 Z_stick = [
-    #(0.5, 0.5), # Center
+    (0.5, 0.5), # Center
 ]
 Y_stick = [
-    #(0.5, 0.0), # Down
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
+    (0.5, 0.0), # Down
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
 ]
 L_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.1625), # Down / Shield Drop (I think?)
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
-    #(1.0, 1.0), # Up Right
-    #(0.0, 1.0), # Up Left
-    #(1.0, 0.0), # Down Right
-    #(0.0, 0.0), # Down Left
-    #(0.925, 0.25), # Airdodge Down Right Full
-    #(0.075, 0.25), # Airdodge Down Left Full
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.1625), # Down / Shield Drop (I think?)
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
+    (1.0, 1.0), # Up Right
+    (0.0, 1.0), # Up Left
+    (1.0, 0.0), # Down Right
+    (0.0, 0.0), # Down Left
+    (0.925, 0.25), # Airdodge Down Right Full
+    (0.075, 0.25), # Airdodge Down Left Full
 ]
 
 
@@ -97,8 +97,7 @@ def one_hot(x, n):
 
 
 class MeleeEnv(object):
-    #num_actions = 44
-    num_actions = 2
+    num_actions = 44
     observation_size = 792
 
     def __init__(self, **dolphin_options):
@@ -172,19 +171,9 @@ class MeleeEnv(object):
 #
 #        reward = 0.00001
 #
-#        #main_x = self._dolphin_state.players[main_player].x
-#        #other_x = self._dolphin_state.players[other_player].x
-#        #main_y = self._dolphin_state.players[main_player].y
-#        #other_y = self._dolphin_state.players[other_player].y
-#        #distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
-#        #reward = max(-1.0, -0.0001 * distance)
-#
-#        #reward += min(1.0, 0.01 * self._percent_taken_by_player(other_player))
-#
 #        if self._player_just_died(other_player):
 #            reward = 1.0
 #
-#        #return np.clip(reward, -1.0, 1.0)
 #        return reward
 
     def _compute_done(self, player_perspective):

@@ -98,7 +98,6 @@ class DQNLearner():
         self.target_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        self.loss_criterion = torch.nn.SmoothL1Loss()
         self.target_update_frequency = target_update_frequency
         self.learn_iterations = 0
 
@@ -115,13 +114,15 @@ class DQNLearner():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, weights):
         state_action_values = self.policy_net(states).gather(1, actions).squeeze(1)
         next_state_values = self.target_net(next_states).max(1)[0].detach()
 
         expected_state_action_values = rewards.squeeze(1) + (next_state_values * self.gamma_n) * (1.0 - dones.squeeze(1))
 
-        loss = self.loss_criterion(state_action_values, expected_state_action_values)
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values) * weights
+        errors = loss
+        loss = loss.mean()
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -133,3 +134,5 @@ class DQNLearner():
             self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.learn_iterations += 1
+
+        return errors.detach().cpu().abs().numpy()

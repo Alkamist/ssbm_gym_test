@@ -10,7 +10,8 @@ import torch
 import torch.multiprocessing as mp
 
 from melee_env import MeleeEnv
-from replay_buffer import ReplayBuffer
+from replay_buffer import PrioritizedReplayBuffer as ReplayBuffer
+#from replay_buffer import ReplayBuffer
 from IQN import DQNLearner, DQN
 #from DQN import DQNLearner, DQN
 
@@ -32,7 +33,7 @@ load_model = None
 
 num_workers = 1
 batch_size = 16
-memory_size = 100000
+memory_size = 18000
 save_every = 500
 
 n_step_size = 5
@@ -43,9 +44,9 @@ grad_norm_clipping = 5.0
 target_update_frequency= 2500
 use_dueling_net = True
 
-epsilon_start = 1.0
+epsilon_start = 0.01
 epsilon_end = 0.01
-epsilon_decay = 1000
+epsilon_decay = 100000
 
 
 def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
@@ -93,7 +94,7 @@ def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
                              rewards[0],
                              next_states[0],
                              dones[0],
-                             score))
+                             rewards[0]))
 
             states = deepcopy(next_states)
 
@@ -108,7 +109,7 @@ def prepare_batches(replay_buffer, thread_dict, frame_queue):
         thread_dict["score"].append(frame[5])
 
         if len(replay_buffer) > batch_size:
-            batch_of_frames = replay_buffer.sample_batch(batch_size)
+            (batch_of_frames), weights, indices = replay_buffer.sample_batch(batch_size)
             state_batch, action_batch, reward_batch, next_state_batch, done_batch = zip(*batch_of_frames)
 
             thread_dict["batches"].append((
@@ -117,6 +118,8 @@ def prepare_batches(replay_buffer, thread_dict, frame_queue):
                 torch.cat(reward_batch, dim=0),
                 torch.cat(next_state_batch, dim=0),
                 torch.cat(done_batch, dim=0),
+                weights,
+                indices,
             ))
 
 
@@ -173,18 +176,20 @@ if __name__ == "__main__":
     while True:
         while len(thread_dict["batches"]) > 0:
             batch = thread_dict["batches"].pop()
-            learner.learn(*batch)
+            errors = learner.learn(batch[0], batch[1], batch[2], batch[3], batch[4], batch[5])
+            replay_buffer.update_priorities_from_errors(batch[6], errors)
             learns += 1
 
             shared_state_dict.load_state_dict(learner.policy_net.state_dict())
 
             if learns % save_every == 0:
                 #learner.save("checkpoints/agent" + str(learns) + ".pth")
-                print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Score {:.1f}".format(
+                print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Score {:.4f}".format(
                     thread_dict["frames_generated"],
                     learns,
                     epsilon.value,
-                    np.sum(thread_dict["score"]),
+                    np.mean(thread_dict["score"]),
+                    #np.sum(thread_dict["score"]),
                 ))
 
             epsilon.value = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)
