@@ -20,7 +20,7 @@ melee_options = dict(
     render=True,
     speed=0,
     player1='ai',
-    player2='human',
+    player2='cpu',
     char1='falcon',
     char2='falcon',
     stage='final_destination',
@@ -28,13 +28,13 @@ melee_options = dict(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#load_model = "checkpoints/agent.pth"
-load_model = None
+load_model = "checkpoints/agent.pth"
+#load_model = None
 
 num_workers = 1
 batch_size = 16
 memory_size = 18000
-save_every = 500
+save_every = 5000
 
 n_step_size = 5
 hidden_size = 512
@@ -61,30 +61,30 @@ def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
     env = MeleeEnv(worker_id=worker_id, **melee_options)
     states = env.reset()
 
-    action_to_repeat = 0
-    action_repeat_count = 0
+    #action_to_repeat = 0
+    #action_repeat_count = 0
 
     with torch.no_grad():
         while True:
             policy_net.load_state_dict(shared_state_dict.state_dict())
 
-            if action_repeat_count > 0:
-                action = action_to_repeat
-                action_repeat_count -= 1
-            else:
-                if random.random() <= epsilon.value:
-                    action = random.randrange(MeleeEnv.num_actions)
-                    action_to_repeat = action
-                    action_repeat_count = random.randrange(4)
-                else:
-                    state = torch.tensor([states[0]], dtype=torch.float32, device=device)
-                    action = policy_net(state).max(1)[1].item()
-
-            #if random.random() <= epsilon.value:
-            #    action = random.randrange(MeleeEnv.num_actions)
+            #if action_repeat_count > 0:
+            #    action = action_to_repeat
+            #    action_repeat_count -= 1
             #else:
-            #    state = torch.tensor([states[0]], dtype=torch.float32, device=device)
-            #    action = policy_net(state).max(1)[1].item()
+            #    if random.random() <= epsilon.value:
+            #        action = random.randrange(MeleeEnv.num_actions)
+            #        action_to_repeat = action
+            #        action_repeat_count = random.randrange(4)
+            #    else:
+            #        state = torch.tensor([states[0]], dtype=torch.float32, device=device)
+            #        action = policy_net(state).max(1)[1].item()
+
+            if random.random() <= epsilon.value:
+                action = random.randrange(MeleeEnv.num_actions)
+            else:
+                state = torch.tensor([states[0]], dtype=torch.float32, device=device)
+                action = policy_net(state).max(1)[1].item()
 
             actions = [action, 0]
             next_states, rewards, dones, score = env.step(actions)
@@ -94,7 +94,7 @@ def generate_frames(worker_id, shared_state_dict, frame_queue, epsilon):
                              rewards[0],
                              next_states[0],
                              dones[0],
-                             rewards[0]))
+                             score))
 
             states = deepcopy(next_states)
 
@@ -183,13 +183,13 @@ if __name__ == "__main__":
             shared_state_dict.load_state_dict(learner.policy_net.state_dict())
 
             if learns % save_every == 0:
-                #learner.save("checkpoints/agent" + str(learns) + ".pth")
+                learner.save("checkpoints/agent" + str(learns) + ".pth")
                 print("Frames: {} / Learns: {} / Epsilon: {:.2f} / Score {:.4f}".format(
                     thread_dict["frames_generated"],
                     learns,
                     epsilon.value,
-                    np.mean(thread_dict["score"]),
-                    #np.sum(thread_dict["score"]),
+                    #np.mean(thread_dict["score"]),
+                    np.sum(thread_dict["score"]),
                 ))
 
             epsilon.value = epsilon_end + (epsilon_start - epsilon_end) * math.exp(-1.0 * learns / epsilon_decay)

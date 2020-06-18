@@ -76,8 +76,8 @@ class ReplayBuffer(object):
 class PrioritizedReplayBuffer(ReplayBuffer):
     def __init__(self, max_size, n_step_size, gamma, device):
         super(PrioritizedReplayBuffer, self).__init__(max_size, n_step_size, gamma, device)
-        self.alpha = 0.9
-        self.beta = 0.4
+        self.alpha = 0.6
+        self.beta = 0.8
         self.epsilon = 0.01
 
         it_capacity = 1
@@ -120,9 +120,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     def update_priorities_from_errors(self, indices, errors):
         for idx, error in zip(indices, errors):
-            assert error > 0
             assert 0 <= idx < len(self.storage)
-            priority = error ** self.alpha
+            priority = (error + self.epsilon) ** self.alpha
             self.it_sum[idx] = priority
             self.it_min[idx] = priority
             self.max_priority = max(self.max_priority, priority)
