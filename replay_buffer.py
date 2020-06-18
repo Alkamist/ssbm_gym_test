@@ -21,10 +21,50 @@ class ReplayBuffer(object):
         self.n_step_actions = deque(maxlen=self.n_step_size)
         self.n_step_rewards = deque(maxlen=self.n_step_size)
 
-    def __len__(self) -> int:
-        return len(self.storage)
+    def add_trajectory(self, states, actions, rewards, next_states, dones, rnn_state, rnn_cell):
+        n_step_trajectory = self._convert_trajectory_to_n_step(states, actions, rewards, next_states, dones)
+        torch_trajectory = self._convert_trajectory_to_torch(*n_step_trajectory)
+        full_trajectory = (*torch_trajectory, rnn_state, rnn_cell)
+        self._add_item(full_trajectory)
 
-    def add(self, state, action, reward, next_state, done):
+    def sample_batch(self, batch_size):
+        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
+        return self._sample_from_indices(indices)
+
+    def _convert_trajectory_to_torch(self, states, actions, rewards, next_states, dones):
+        return (
+            torch.tensor(states, dtype=torch.float32, device=self.device).unsqueeze(1),
+            torch.tensor(actions, dtype=torch.long, device=self.device).unsqueeze(1).unsqueeze(2),
+            torch.tensor(rewards, dtype=torch.float32, device=self.device).unsqueeze(1).unsqueeze(2),
+            torch.tensor(next_states, dtype=torch.float32, device=self.device).unsqueeze(1),
+            torch.tensor(dones, dtype=torch.float32, device=self.device).unsqueeze(1).unsqueeze(2),
+        )
+
+    def _convert_trajectory_to_n_step(self, states, actions, rewards, next_states, dones):
+        trajectory_length = len(actions)
+
+        new_states = []
+        new_actions = []
+        new_rewards = []
+        new_next_states = []
+        new_dones = []
+
+        for step in range(trajectory_length):
+            state, action, reward, next_state, done = self._convert_transition_to_n_step(states[step],
+                                                                                         actions[step],
+                                                                                         rewards[step],
+                                                                                         next_states[step],
+                                                                                         dones[step])
+
+            new_states.append(state)
+            new_actions.append(action)
+            new_rewards.append(reward)
+            new_next_states.append(next_state)
+            new_dones.append(done)
+
+        return new_states, new_actions, new_rewards, new_next_states, new_dones
+
+    def _convert_transition_to_n_step(self, state, action, reward, next_state, done):
         if self.n_step_size > 1:
             self.n_step_states.append(state)
             self.n_step_actions.append(action)
@@ -33,35 +73,19 @@ class ReplayBuffer(object):
             if len(self.n_step_states) >= self.n_step_size:
                 n_step_state = self.n_step_states.popleft()
                 n_step_action = self.n_step_actions.popleft()
-                n_step_reward = self._get_n_step_return()
+                n_step_reward = np.sum([r * (self.gamma ** i) for i, r in enumerate(self.n_step_rewards)])
                 self.n_step_rewards.popleft()
             else:
                 n_step_state = state
                 n_step_action = action
                 n_step_reward = reward
 
-            self._add(n_step_state, n_step_action, n_step_reward, next_state, done)
+            return (n_step_state, n_step_action, n_step_reward, next_state, done)
 
         else:
-            self._add(state, action, reward, next_state, done)
+            return (state, action, reward, next_state, done)
 
-    def _sample_from_indices(self, indices):
-        batch_of_items = []
-        for i in indices:
-            batch_of_items.append(self.storage[i])
-        return batch_of_items
-
-    def sample_batch(self, batch_size):
-        indices = [random.randint(0, len(self.storage) - 1) for _ in range(batch_size)]
-        return self._sample_from_indices(indices)
-
-    def _add(self, state, action, reward, next_state, done):
-        item = (torch.tensor([state], dtype=torch.float32, device=self.device),
-                torch.tensor([[action]], dtype=torch.long, device=self.device),
-                torch.tensor([[reward]], dtype=torch.float32, device=self.device),
-                torch.tensor([next_state], dtype=torch.float32, device=self.device),
-                torch.tensor([[done]], dtype=torch.float32, device=self.device))
-
+    def _add_item(self, item):
         if self.next_index >= len(self.storage):
             self.storage.append(item)
         else:
@@ -69,8 +93,14 @@ class ReplayBuffer(object):
 
         self.next_index = (self.next_index + 1) % self.max_size
 
-    def _get_n_step_return(self):
-        return np.sum([r * (self.gamma ** i) for i, r in enumerate(self.n_step_rewards)])
+    def _sample_from_indices(self, indices):
+        batch_of_items = []
+        for i in indices:
+            batch_of_items.append(self.storage[i])
+        return batch_of_items
+
+    def __len__(self) -> int:
+        return len(self.storage)
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -88,11 +118,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self.it_min = MinSegmentTree(it_capacity)
         self.max_priority = 1.0
 
-    def add(self, state, action, reward, next_state, done):
+    def add_trajectory(self, states, actions, rewards, next_states, dones, rnn_state, rnn_cell):
         priority = self.max_priority ** self.alpha
         self.it_sum[self.next_index] = priority
         self.it_min[self.next_index] = priority
-        super(PrioritizedReplayBuffer, self).add(state, action, reward, next_state, done)
+        super(PrioritizedReplayBuffer, self).add_trajectory(states, actions, rewards, next_states, dones, rnn_state, rnn_cell)
 
     def sample_batch(self, batch_size):
         assert self.beta > 0

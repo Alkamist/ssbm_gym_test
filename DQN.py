@@ -21,12 +21,13 @@ def initialize_weights_he(m):
 
 
 class DQN(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, use_dueling_net):
+    def __init__(self, input_size, output_size, hidden_size, use_rnn, use_dueling_net, device):
         super(DQN, self).__init__()
 
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_size = hidden_size
+        self.use_rnn = use_rnn
         self.use_dueling_net = use_dueling_net
 
         self.feature_net = nn.Sequential(
@@ -34,6 +35,12 @@ class DQN(nn.Module):
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
         ).apply(initialize_weights_he)
+
+        if self.use_rnn:
+            self.num_rnn_layers = 1
+            self.rnn = nn.LSTM(self.hidden_size, self.hidden_size, self.num_rnn_layers)
+            self.rnn_state = (torch.randn(self.num_rnn_layers, 1, self.hidden_size, device=device),
+                              torch.randn(self.num_rnn_layers, 1, self.hidden_size, device=device))
 
         if self.use_dueling_net:
             self.advantage_net = nn.Sequential(
@@ -53,8 +60,13 @@ class DQN(nn.Module):
                 nn.Linear(self.hidden_size, self.output_size),
             )
 
+        self.to(device)
+
     def forward(self, state):
         features = self.feature_net(state)
+
+        if self.use_rnn:
+            features, self.rnn_state = self.rnn(features, self.rnn_state)
 
         if self.use_dueling_net:
             baselines = self.baseline_net(features)
@@ -68,7 +80,7 @@ class DQN(nn.Module):
 
 class DQNLearner():
     def __init__(self, state_size, action_size, hidden_size, batch_size, n_step_size, device,
-                 learning_rate, gamma, grad_norm_clipping, target_update_frequency, use_dueling_net):
+                 learning_rate, gamma, grad_norm_clipping, target_update_frequency, use_rnn, use_dueling_net):
         self.state_size = state_size
         self.action_size = action_size
         self.hidden_size = hidden_size
@@ -79,21 +91,26 @@ class DQNLearner():
         self.gamma_n = self.gamma ** self.n_step_size
         self.grad_norm_clipping = grad_norm_clipping
         self.device = device
+        self.use_rnn = use_rnn
 
         self.policy_net = DQN(
             input_size=self.state_size,
             output_size=self.action_size,
             hidden_size=self.hidden_size,
+            use_rnn=self.use_rnn,
             use_dueling_net=use_dueling_net,
-        ).to(self.device)
+            device=self.device,
+        )
         self.policy_net.train()
 
         self.target_net = DQN(
             input_size=self.state_size,
             output_size=self.action_size,
             hidden_size=self.hidden_size,
+            use_rnn=self.use_rnn,
             use_dueling_net=use_dueling_net,
-        ).to(self.device)
+            device=self.device,
+        )
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -114,15 +131,29 @@ class DQNLearner():
     def train(self):
         self.policy_net.train()
 
-    def learn(self, states, actions, rewards, next_states, dones, weights):
-        state_action_values = self.policy_net(states).gather(1, actions).squeeze(1)
-        next_state_values = self.target_net(next_states).max(1)[0].detach()
+    def learn(self, states, actions, rewards, next_states, dones, rnn_state=None, rnn_cell_state=None, weights=None):
+        if self.use_rnn:
+            if rnn_state is None:
+                full_rnn_state = (torch.randn(self.policy_net.num_rnn_layers, self.batch_size, self.hidden_size, device=self.device),
+                                  torch.randn(self.policy_net.num_rnn_layers, self.batch_size, self.hidden_size, device=self.device))
+            else:
+                full_rnn_state = (rnn_state, rnn_cell_state)
 
-        expected_state_action_values = rewards.squeeze(1) + (next_state_values * self.gamma_n) * (1.0 - dones.squeeze(1))
+            self.policy_net.rnn_state = full_rnn_state
+            self.target_net.rnn_state = full_rnn_state
 
-        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values) * weights
-        errors = loss
-        loss = loss.mean()
+        state_action_values = self.policy_net(states).gather(2, actions).squeeze(2)
+        next_state_values = self.target_net(next_states).max(2)[0].detach()
+
+        expected_state_action_values = rewards.squeeze(2) + (next_state_values * self.gamma_n) * (1.0 - dones.squeeze(2))
+
+        if weights is not None:
+            loss = F.smooth_l1_loss(state_action_values, expected_state_action_values) * weights
+            errors = loss
+            loss = loss.mean()
+        else:
+            loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+            errors = loss
 
         self.optimizer.zero_grad()
         loss.backward()

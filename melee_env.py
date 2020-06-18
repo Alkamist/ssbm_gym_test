@@ -16,20 +16,20 @@ num_characters = 32
 
 
 NONE_stick = [
-    (0.5, 0.5), # Center
-    (0.5, 1.0), # Up
-    (0.5, 0.0), # Down
+    #(0.5, 0.5), # Center
+    #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    (0.65, 0.5), # Tilt Right
-    (0.35, 0.5), # Tilt Left
+    #(0.65, 0.5), # Tilt Right
+    #(0.35, 0.5), # Tilt Left
 ]
 A_stick = [
-    (0.5, 0.5), # Center
-    (0.5, 1.0), # Up
-    (0.5, 0.0), # Down
-    (1.0, 0.5), # Right
-    (0.0, 0.5), # Left
+    #(0.5, 0.5), # Center
+    #(0.5, 1.0), # Up
+    #(0.5, 0.0), # Down
+    #(1.0, 0.5), # Right
+    #(0.0, 0.5), # Left
     #(1.0, 1.0), # Up Right
     #(0.0, 1.0), # Up Left
     #(1.0, 0.0), # Down Right
@@ -51,7 +51,7 @@ B_stick = [
     #(0.0, 0.5), # Left
 ]
 Z_stick = [
-    (0.5, 0.5), # Center
+    #(0.5, 0.5), # Center
 ]
 Y_stick = [
     #(0.5, 0.0), # Down
@@ -59,7 +59,7 @@ Y_stick = [
     #(0.0, 0.5), # Left
 ]
 L_stick = [
-    (0.5, 0.5), # Center
+    #(0.5, 0.5), # Center
     #(0.5, 1.0), # Up
     #(0.5, 0.1625), # Down / Shield Drop (I think?)
     #(1.0, 0.5), # Right
@@ -98,8 +98,8 @@ def one_hot(x, n):
 
 class MeleeEnv(object):
     #num_actions = 44
-    num_actions = 14
-    observation_size = 792
+    num_actions = 2
+    observation_size = 792 + num_actions
 
     def __init__(self, **dolphin_options):
         self.dolphin = DolphinAPI(**dolphin_options)
@@ -107,6 +107,7 @@ class MeleeEnv(object):
         self.observation_space = MeleeObservationSpace(self.observation_size)
         self._previous_dolphin_state = None
         self._dolphin_state = None
+        self._previous_actions = [0, 0]
 
     def reset(self):
         self._previous_dolphin_state = None
@@ -130,6 +131,8 @@ class MeleeEnv(object):
             score = -1.0
 
         self._previous_dolphin_state = deepcopy(self._dolphin_state)
+
+        self._previous_actions = deepcopy(actions)
 
         return observations, rewards, dones, score
 
@@ -161,27 +164,27 @@ class MeleeEnv(object):
         else:
             main_player = self._player_state_to_numpy(state.players[player_perspective], None)
             other_player = self._player_state_to_numpy(state.players[1 - player_perspective], None)
-        return np.concatenate((main_player, other_player))
-
-#    def _compute_reward(self, player_perspective):
-#        return max(0.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - 0.0))
+        return np.concatenate((main_player, other_player, one_hot(self._previous_actions[player_perspective], self.num_actions)))
 
     def _compute_reward(self, player_perspective):
-        main_player = player_perspective
-        other_player = 1 - player_perspective
+        return max(0.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - 0.0))
 
-        reward = 0.0
-
-        if self._player_just_died(other_player):
-            reward = 1.0
-
-        if self._player_just_died(main_player):
-            reward = -1.0
-
-        return reward
-
-    def _compute_done(self, player_perspective):
-        return False
+#    def _compute_reward(self, player_perspective):
+#        main_player = player_perspective
+#        other_player = 1 - player_perspective
+#
+#        reward = 0.0
+#
+#        if self._player_just_died(other_player):
+#            reward = 1.0
+#
+#        if self._player_just_died(main_player):
+#            reward = -1.0
+#
+#        return reward
+#
+#    def _compute_done(self, player_perspective):
+#        return False
 
 #    def _compute_reward(self, player_perspective):
 #        main_player = player_perspective
@@ -194,8 +197,8 @@ class MeleeEnv(object):
 #
 #        return reward
 
-#    def _compute_done(self, player_perspective):
-#        return self._player_just_died(player_perspective)
+    def _compute_done(self, player_perspective):
+        return self._player_just_died(player_perspective)
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:
