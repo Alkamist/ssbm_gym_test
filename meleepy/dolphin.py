@@ -4,10 +4,10 @@ from pathlib import Path
 
 from .config_templates import *
 from .memory_watcher import MemoryWatcher
+from .pad import Pad
 
 
 IS_USING_WINDOWS = platform.system() == "Windows"
-
 
 CHARACTER_IDS = {
   "falcon": 0x0,
@@ -96,7 +96,17 @@ class Dolphin:
 
         self.current_directory = Path.cwd()
 
-        self.user_directory = self.current_directory.joinpath("DolphinUser")
+        self.user_directory = self.current_directory.joinpath("DolphinUser", "UniqueID" + str(unique_id))
+        if not self.user_directory.is_dir():
+            self.user_directory.mkdir()
+
+        self.config_directory = self.user_directory.joinpath("Config")
+        if not self.config_directory.is_dir():
+            self.config_directory.mkdir()
+
+        self.game_settings_directory = self.user_directory.joinpath("GameSettings")
+        if not self.game_settings_directory.is_dir():
+            self.game_settings_directory.mkdir()
 
         self.melee_iso_path = str(self.current_directory.joinpath("MeleeISO", "SSBM.iso")) \
                               if melee_iso_path is None else Path(melee_iso_path)
@@ -123,11 +133,11 @@ class Dolphin:
         self.speed = speed
         self.fullscreen = fullscreen
 
-        self._create_directories()
         self._create_ai_pipe_config()
         self._create_dolphin_config()
         self._create_melee_config()
         self._create_memory_watcher()
+        self._create_ai_pads()
 
         self.process = None
 
@@ -149,6 +159,21 @@ class Dolphin:
         #    self.update_state()
 
         #return self.state
+
+    def step(self, controllers):
+        for pid, pad in zip(self.ai_pad_ids, self.ai_pads):
+            pad.send_controller(controllers[pid])
+
+        while self.state.frame == self.last_frame:
+            try:
+                self.memory_watcher.advance()
+                self._update_state()
+            except:
+                pass
+
+        self.last_frame = self.state.frame
+
+        return self.state
 
     def close(self):
         if self.process != None:
@@ -173,18 +198,14 @@ class Dolphin:
 
         return self.process
 
-    def _create_directories(self):
-        self.config_directory = self.user_directory.joinpath("Config")
-        if not self.config_directory.is_dir():
-            self.config_directory.mkdir()
+    def _update_state(self):
+        messages = self.memory_watcher.get_messages()
+        for message in messages:
+            self.sm.handle(self.state, *message)
 
-        self.game_settings_directory = self.user_directory.joinpath("GameSettings")
-        if not self.game_settings_directory.is_dir():
-            self.game_settings_directory.mkdir()
-
-        self.pipes_directory = self.user_directory.joinpath("Pipes")
-        if not self.pipes_directory.is_dir():
-            self.pipes_directory.mkdir()
+    def _write_locations(self):
+        with open(self.memory_watcher.directory.joinpath("Locations.txt"), "w") as f:
+            f.write("\n".join(self.sm.locations()))
 
     def _create_ai_pipe_config(self):
         with open(self.config_directory.joinpath("GCPadNew.ini"), "w") as f:
@@ -247,12 +268,13 @@ class Dolphin:
             self.memory_watcher = MemoryWatcher(dolphin_user_directory=str(self.user_directory))
 
     def _create_ai_pads(self):
-        ai_pad_ids = []
+        self.ai_pad_ids = []
         if self.player1 == "ai":
-            ai_pad_ids.append(0)
+            self.ai_pad_ids.append(0)
         if self.player2 == "ai":
-            ai_pad_ids.append(1)
+            self.ai_pad_ids.append(1)
 
-        pipe_paths = [self.pipes_directory.joinpath("p%d" % i) for i in ai_pad_ids]
-
-        self.ai_pads =
+        if IS_USING_WINDOWS:
+            self.ai_pads = [Pad(dolphin_user_directory=str(self.user_directory), pad_id=i, unique_id=self.unique_id) for i in self.ai_pad_ids]
+        else:
+            self.ai_pads = [Pad(dolphin_user_directory=str(self.user_directory), pad_id=i) for i in self.ai_pad_ids]

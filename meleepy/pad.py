@@ -1,5 +1,6 @@
 import enum
 import os
+from pathlib import Path
 
 
 @enum.unique
@@ -31,8 +32,14 @@ class Stick(enum.Enum):
 
 
 class Pad:
-    def __init__(self, path, unique_id=None):
-        self.pad_id = int(path[-1])
+    def __init__(self, dolphin_user_directory, pad_id, unique_id=None):
+        self.pipes_directory = Path(dolphin_user_directory).joinpath("Pipes")
+        if not self.pipes_directory.is_dir():
+            self.pipes_directory.mkdir()
+
+        self.file_path = self.pipes_directory.joinpath("p%d" % pad_id)
+
+        self.pad_id = pad_id
         self.unique_id = unique_id
         self.use_tcp = self.unique_id is not None
 
@@ -41,7 +48,7 @@ class Pad:
             context = zmq.Context()
             port = self._get_tcp_port()
 
-            with open(path, 'w') as f:
+            with open(self.file_path, 'w') as f:
                 f.write(str(port))
 
             self.socket = context.socket(zmq.PUSH)
@@ -50,10 +57,10 @@ class Pad:
             self.socket.bind(address)
         else:
             try:
-                os.mkfifo(path)
+                os.mkfifo(self.file_path)
             except FileExistsError:
                 pass
-            self.pipe = open(path, 'w', buffering=1)
+            self.pipe = open(self.file_path, 'w', buffering=1)
 
         self.message = ""
 
