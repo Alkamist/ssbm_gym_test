@@ -1,4 +1,4 @@
-[General]
+DOLPHIN_INI = """[General]
 LastFilename = SSBM.iso
 ShowLag = False
 ShowFrameCount = False
@@ -143,11 +143,91 @@ BackgroundInput = True
 [FifoPlayer]
 LoopReplay = True
 [NetPlay]
-Nickname = Gurvan
+Nickname = Player
 ConnectPort = 2626
 HostPort = 2626
 ListenPort = 0
 [Analytics]
-#ID = 15db0abbb953a46c012d20edb2615e4e
 Enabled = False
 PermissionAsked = True
+"""
+
+
+GALE01_INI = """[Gecko]
+{match_setup}
+
+[Gecko_Enabled]
+$DMA Read Before Poll
+$Skip Memcard Prompt
+{speed_hack}
+$Boot To Match
+$Match Setup
+"""
+
+
+PIPE_CONFIG = """Buttons/A = `Button A`
+Buttons/B = `Button B`
+Buttons/X = `Button X`
+Buttons/Y = `Button Y`
+Buttons/Z = `Button Z`
+Main Stick/Up = `Axis MAIN Y +`
+Main Stick/Down = `Axis MAIN Y -`
+Main Stick/Left = `Axis MAIN X -`
+Main Stick/Right = `Axis MAIN X +`
+Triggers/L = `Button L`
+Triggers/R = `Button R`
+D-Pad/Up = `Button D_UP`
+D-Pad/Down = `Button D_DOWN`
+D-Pad/Left = `Button D_LEFT`
+D-Pad/Right = `Button D_RIGHT`
+Buttons/Start = `Button START`
+C-Stick/Up = `Axis C Y +`
+C-Stick/Down = `Axis C Y -`
+C-Stick/Left = `Axis C X -`
+C-Stick/Right = `Axis C X +`
+"""
+#Triggers/L-Analog = `Axis L -+`
+#Triggers/R-Analog = `Axis R -+`
+
+
+BOOT_TO_MATCH = """
+$Match Setup
+C21B148C 00000025 #BootToMatch.asm
+3C608048 60630530
+48000021 7C8802A6
+38A000F0 3D808000
+618C31F4 7D8903A6
+4E800421 480000F8
+4E800021 0808024C
+00000000 000000FF
+000000{stage} 00000000
+00000000 00000000
+00000000 FFFFFFFF
+FFFFFFFF 00000000
+3F800000 3F800000
+3F800000 00000000
+00000000 00000000
+00000000 00000000
+00000000 00000000
+00000000 00000000
+00000000 {char1}{player1}0400
+00FF0000 09007800
+400004{cpu1} 00000000
+00000000 3F800000
+3F800000 3F800000
+{char2}{player2}0400 00FF0000
+09007800 400004{cpu2}
+00000000 00000000
+3F800000 3F800000
+3F800000 09030400
+00FF0000 09007800
+40000401 00000000
+00000000 3F800000
+3F800000 3F800000
+09030400 00FF0000
+09007800 40000401
+00000000 00000000
+3F800000 3F800000
+3F800000 BB610014
+60000000 00000000
+"""

@@ -16,20 +16,20 @@ num_characters = 32
 
 
 NONE_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
     (1.0, 0.5), # Right
     (0.0, 0.5), # Left
-    #(0.65, 0.5), # Tilt Right
-    #(0.35, 0.5), # Tilt Left
+    (0.65, 0.5), # Tilt Right
+    (0.35, 0.5), # Tilt Left
 ]
 A_stick = [
-    #(0.5, 0.5), # Center
-    #(0.5, 1.0), # Up
-    #(0.5, 0.0), # Down
-    #(1.0, 0.5), # Right
-    #(0.0, 0.5), # Left
+    (0.5, 0.5), # Center
+    (0.5, 1.0), # Up
+    (0.5, 0.0), # Down
+    (1.0, 0.5), # Right
+    (0.0, 0.5), # Left
     #(1.0, 1.0), # Up Right
     #(0.0, 1.0), # Up Left
     #(1.0, 0.0), # Down Right
@@ -51,7 +51,7 @@ B_stick = [
     #(0.0, 0.5), # Left
 ]
 Z_stick = [
-    #(0.5, 0.5), # Center
+    (0.5, 0.5), # Center
 ]
 Y_stick = [
     #(0.5, 0.0), # Down
@@ -59,7 +59,7 @@ Y_stick = [
     #(0.0, 0.5), # Left
 ]
 L_stick = [
-    #(0.5, 0.5), # Center
+    (0.5, 0.5), # Center
     #(0.5, 1.0), # Up
     #(0.5, 0.1625), # Down / Shield Drop (I think?)
     #(1.0, 0.5), # Right
@@ -98,7 +98,7 @@ def one_hot(x, n):
 
 class MeleeEnv(object):
     #num_actions = 44
-    num_actions = 2
+    num_actions = 14
     observation_size = 792 + num_actions
 
     def __init__(self, **dolphin_options):
@@ -167,38 +167,35 @@ class MeleeEnv(object):
         return np.concatenate((main_player, other_player, one_hot(self._previous_actions[player_perspective], self.num_actions)))
 
     def _compute_reward(self, player_perspective):
-        return max(0.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - 0.0))
+        main_player = player_perspective
+        other_player = 1 - player_perspective
 
-#    def _compute_reward(self, player_perspective):
-#        main_player = player_perspective
-#        other_player = 1 - player_perspective
-#
-#        reward = 0.0
-#
-#        if self._player_just_died(other_player):
-#            reward = 1.0
-#
-#        if self._player_just_died(main_player):
-#            reward = -1.0
-#
-#        return reward
-#
-#    def _compute_done(self, player_perspective):
-#        return False
+        #main_x = self._dolphin_state.players[main_player].x
+        #other_x = self._dolphin_state.players[other_player].x
+        #main_y = self._dolphin_state.players[main_player].y
+        #other_y = self._dolphin_state.players[other_player].y
+        #distance = math.sqrt((main_x - other_x)**2 + (main_y - other_y)**2)
+        #reward = 0.00001 * max(0.0, 1.0 - (0.003 * distance))
 
-#    def _compute_reward(self, player_perspective):
-#        main_player = player_perspective
-#        other_player = 1 - player_perspective
-#
-#        reward = 0.00001
-#
-#        if self._player_just_died(other_player):
-#            reward = 1.0
-#
-#        return reward
+        reward = 0.0
+        #reward = 0.001 * self._percent_taken_by_player(other_player)
+
+        if self._player_just_died(other_player):
+            reward = 1.0
+
+        if self._player_just_died(main_player):
+            reward = -1.0
+
+        return reward
 
     def _compute_done(self, player_perspective):
-        return self._player_just_died(player_perspective)
+        return False
+
+#    def _compute_reward(self, player_perspective):
+#        return max(0.0, 1.0 - 0.03 * abs(self._dolphin_state.players[player_perspective].x - 0.0))
+
+#    def _compute_done(self, player_perspective):
+#        return self._player_just_died(player_perspective)
 
     def _percent_taken_by_player(self, player_index):
         if self._previous_dolphin_state is None:

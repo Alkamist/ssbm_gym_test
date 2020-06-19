@@ -104,9 +104,8 @@ venv.bak/
 .mypy_cache/
 
 # Custom
-
 checkpoints/*
-replay_memories/*
-dolphin-exe/*
-ISOs/*
+DolphinEmulator/*
+DolphinUser/*
+MeleeISO/*
 !*/.gitkeep

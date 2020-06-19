@@ -1,6 +1,7 @@
 import enum
 import os
 
+
 @enum.unique
 class Button(enum.Enum):
     A = 0
@@ -16,32 +17,29 @@ class Button(enum.Enum):
     D_LEFT = 10
     D_RIGHT = 11
 
+
 @enum.unique
 class Trigger(enum.Enum):
     L = 0
     R = 1
+
 
 @enum.unique
 class Stick(enum.Enum):
     MAIN = 0
     C = 1
 
-class Pad:
-    def get_tcp_port(self):
-        min_mw_tcp_port = 5555
-        max_workers = 11520
-        max_pads_per_worker = 4
-        start_offset = min_mw_tcp_port + max_workers
-        return start_offset + self.pad_id + max_pads_per_worker * self.worker_id
 
-    def __init__(self, path, tcp=False, worker_id=0):
+class Pad:
+    def __init__(self, path, unique_id=None):
         self.pad_id = int(path[-1])
-        self.worker_id = worker_id
-        self.tcp = tcp
-        if tcp:
+        self.unique_id = unique_id
+        self.use_tcp = self.unique_id is not None
+
+        if self.use_tcp:
             import zmq
             context = zmq.Context()
-            port = self.get_tcp_port()
+            port = self._get_tcp_port()
 
             with open(path, 'w') as f:
                 f.write(str(port))
@@ -59,19 +57,13 @@ class Pad:
 
         self.message = ""
 
-    def __del__(self):
-        if not self.tcp:
-            self.pipe.close()
-        else:
-            self.socket.close()
-
     def write(self, command, buffering=False):
         self.message += command + '\n'
         if not buffering:
             self.flush()
 
     def flush(self):
-        if self.tcp:
+        if self.use_tcp:
             self.socket.send_string(self.message)
         else:
             self.pipe.write(self.message)
@@ -114,3 +106,16 @@ class Pad:
             self.tilt_stick(stick, value.x, value.y, True)
 
         self.flush()
+
+    def _get_tcp_port(self):
+        min_mw_tcp_port = 5555
+        max_workers = 11520
+        max_pads_per_worker = 4
+        start_offset = min_mw_tcp_port + max_workers
+        return start_offset + self.pad_id + max_pads_per_worker * self.unique_id
+
+    def __del__(self):
+        if not self.use_tcp:
+            self.pipe.close()
+        else:
+            self.socket.close()
