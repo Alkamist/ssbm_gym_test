@@ -1,8 +1,10 @@
+import time
 import subprocess
 import platform
 from pathlib import Path
 
 from .setup_dolphin_user import setup_dolphin_user
+from .slippi import Slippi
 
 
 IS_USING_WINDOWS = platform.system() == "Windows"
@@ -10,6 +12,7 @@ IS_USING_WINDOWS = platform.system() == "Windows"
 
 class Melee:
     def __init__(self,
+                 slippi_address="",
                  dolphin_path=None,
                  melee_iso_path=None,
                  player_stats=["human", "ai"],
@@ -29,7 +32,7 @@ class Melee:
 
         self.user_directory = setup_dolphin_user(
             in_directory=self.current_directory,
-            player_stats=["human", "ai"],
+            player_stats=player_stats,
             render=render,
             speed=speed,
             fullscreen=fullscreen,
@@ -38,16 +41,25 @@ class Melee:
 
         self.render = render
 
+        self.slippi_address = slippi_address
+        self.slippi_port = 51441
+        self.slippi = Slippi(self.slippi_address, self.slippi_port)
+
         self.process = None
 
     def reset(self):
         self.close()
         self._start_process()
+        time.sleep(1)
+        self.slippi.client.connect()
 
-    #def step(self, controllers):
-    #    return self.state
+    def step(self):
+        game_state = self.slippi.get_game_state()
+        return game_state
 
     def close(self):
+        self.slippi.client.shutdown()
+
         if self.process is not None:
             self.process.terminate()
 

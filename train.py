@@ -20,5 +20,7 @@ if __name__ == "__main__":
         render=True,
         speed=1,
         fullscreen=False,
-        audio=False
+        audio=False,
     )
+
+    melee.reset()
