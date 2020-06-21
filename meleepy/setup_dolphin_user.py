@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 DOLPHIN_INI = """[General]
 LastFilename = SSBM.iso
 ShowLag = False
@@ -6,6 +9,7 @@ ISOPaths = 2
 RecursiveISOPaths = False
 NANDRootPath =
 WirelessMac =
+EnableSlippiNetworkingOutput = True
 [Interface]
 ConfirmStop = False
 UsePanicHandlers = True
@@ -153,18 +157,6 @@ PermissionAsked = True
 """
 
 
-GALE01_INI = """[Gecko]
-{match_setup}
-
-[Gecko_Enabled]
-$DMA Read Before Poll
-$Skip Memcard Prompt
-{speed_hack}
-$Boot To Match
-$Match Setup
-"""
-
-
 PIPE_CONFIG = """Buttons/A = `Button A`
 Buttons/B = `Button B`
 Buttons/X = `Button X`
@@ -185,49 +177,60 @@ C-Stick/Up = `Axis C Y +`
 C-Stick/Down = `Axis C Y -`
 C-Stick/Left = `Axis C X -`
 C-Stick/Right = `Axis C X +`
+Triggers/L-Analog = `Axis L -+`
+Triggers/R-Analog = `Axis R -+`
 """
-#Triggers/L-Analog = `Axis L -+`
-#Triggers/R-Analog = `Axis R -+`
 
 
-BOOT_TO_MATCH = """
-$Match Setup
-C21B148C 00000025 #BootToMatch.asm
-3C608048 60630530
-48000021 7C8802A6
-38A000F0 3D808000
-618C31F4 7D8903A6
-4E800421 480000F8
-4E800021 0808024C
-00000000 000000FF
-000000{stage} 00000000
-00000000 00000000
-00000000 FFFFFFFF
-FFFFFFFF 00000000
-3F800000 3F800000
-3F800000 00000000
-00000000 00000000
-00000000 00000000
-00000000 00000000
-00000000 00000000
-00000000 {char1}{player1}0400
-00FF0000 09007800
-400004{cpu1} 00000000
-00000000 3F800000
-3F800000 3F800000
-{char2}{player2}0400 00FF0000
-09007800 400004{cpu2}
-00000000 00000000
-3F800000 3F800000
-3F800000 09030400
-00FF0000 09007800
-40000401 00000000
-00000000 3F800000
-3F800000 3F800000
-09030400 00FF0000
-09007800 40000401
-00000000 00000000
-3F800000 3F800000
-3F800000 BB610014
-60000000 00000000
-"""
+def create_directory(path):
+    if not path.is_dir():
+        path.mkdir()
+
+
+def setup_pipe_config(config_directory, player_stats):
+    with open(config_directory.joinpath("GCPadNew.ini"), "w") as f:
+        config = ""
+
+        for player_id, player_stat in enumerate(player_stats):
+            if player_stat == "ai":
+                player_number = player_id + 1
+                config += "[GCPad%d]\n" % player_number
+                config += "Device = Pipe/p%d\n" % player_number
+                config += PIPE_CONFIG
+
+        f.write(config)
+
+
+def setup_dolphin_config(config_directory, user_directory, render, audio, speed, fullscreen, player_stats):
+    with open(config_directory.joinpath("Dolphin.ini"), "w") as f:
+        f.write(DOLPHIN_INI.format(
+            user=user_directory,
+            gfx="OGL" if render else "Null",
+            audio="Pulse" if audio else "No audio backend",
+            speed=speed,
+            fullscreen=fullscreen,
+            port1 = 12 if player_stats[0] == "human" else 6,
+            port2 = 12 if player_stats[1] == "human" else 6,
+        ))
+
+
+def setup_dolphin_user(in_directory=None,
+                       player_stats=["human", "ai"],
+                       render=True,
+                       speed=0,
+                       fullscreen=False,
+                       audio=False):
+
+    in_directory = Path(in_directory)
+
+    user_directory = in_directory.joinpath("DolphinUser")
+    config_directory = user_directory.joinpath("Config")
+
+    create_directory(in_directory)
+    create_directory(user_directory)
+    create_directory(config_directory)
+
+    setup_pipe_config(config_directory, player_stats)
+    setup_dolphin_config(config_directory, user_directory, render, audio, speed, fullscreen, player_stats)
+
+    return user_directory

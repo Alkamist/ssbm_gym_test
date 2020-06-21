@@ -1,4 +1,4 @@
-from meleepy.dolphin import Dolphin
+from meleepy.melee import Melee
 
 
 #melee_options = dict(
@@ -13,4 +13,12 @@ from meleepy.dolphin import Dolphin
 
 
 if __name__ == "__main__":
-    dolphin = Dolphin()
+    melee = Melee(
+        dolphin_path=None,
+        melee_iso_path=None,
+        player_stats=["human", "ai"],
+        render=True,
+        speed=1,
+        fullscreen=False,
+        audio=False
+    )
