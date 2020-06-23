@@ -5,39 +5,35 @@ DOLPHIN_INI = """[General]
 LastFilename = SSBM.iso
 ShowLag = False
 ShowFrameCount = False
-ISOPaths = 0
+ISOPaths = 2
 RecursiveISOPaths = False
 NANDRootPath =
-DumpPath =
 WirelessMac =
-WiiSDCardPath = {user}/Wii/sd.raw
-SlippiConsoleName = Dolphin
-EnableSlippiNetworkingOutput = False
+EnableSlippiNetworkingOutput = True
 [Interface]
 ConfirmStop = False
 UsePanicHandlers = True
 OnScreenDisplayMessages = True
 HideCursor = False
 AutoHideCursor = False
-MainWindowPosX = 300
-MainWindowPosY = 300
+MainWindowPosX = 50
+MainWindowPosY = 50
 MainWindowWidth = 400
 MainWindowHeight = 328
-LanguageCode =
+Language = 0
 ShowToolbar = True
 ShowStatusbar = True
 ShowLogWindow = False
 ShowLogConfigWindow = False
 ExtendedFPSInfo = False
-ThemeName = Clean
+ThemeName40 = Clean
 PauseOnFocusLost = False
-DisableTooltips = False
 [Display]
 FullscreenResolution = Auto
 Fullscreen = {fullscreen}
 RenderToMain = False
-RenderWindowXPos = 200
-RenderWindowYPos = 200
+RenderWindowXPos = 0
+RenderWindowYPos = 0
 RenderWindowWidth = 320
 RenderWindowHeight = 264
 RenderWindowAutoSize = False
@@ -78,12 +74,13 @@ ColumnRegion = True
 ColumnSize = True
 ColumnState = True
 [Core]
-HLE_BS2 = False
+HLE_BS2 = True
 TimingVariance = 40
 CPUCore = 1
 Fastmem = True
 CPUThread = True
 DSPHLE = True
+SkipIdle = True
 SyncOnSkipIdle = True
 SyncGPU = False
 SyncGpuMaxDistance = 200000
@@ -98,28 +95,26 @@ EnableCheats = True
 SelectedLanguage = 0
 OverrideGCLang = False
 DPL2Decoder = False
-TimeStretching = False
-RSHACK = False
 Latency = 2
 MemcardAPath = {user}/GC/MemoryCardA.USA.raw
 MemcardBPath = {user}/GC/MemoryCardB.USA.raw
 AgpCartAPath =
 AgpCartBPath =
 SlotA = 255
-SlotB = 255
+SlotB = 10
 SerialPort1 = 255
 BBA_MAC =
 SIDevice0 = {port1}
-AdapterRumble0 = True
+AdapterRumble0 = False
 SimulateKonga0 = False
 SIDevice1 = {port2}
-AdapterRumble1 = True
+AdapterRumble1 = False
 SimulateKonga1 = False
 SIDevice2 = 0
-AdapterRumble2 = True
+AdapterRumble2 = False
 SimulateKonga2 = False
 SIDevice3 = 0
-AdapterRumble3 = True
+AdapterRumble3 = False
 SimulateKonga3 = False
 WiiSDCard = False
 WiiKeyboard = False
@@ -129,59 +124,36 @@ RunCompareServer = False
 RunCompareClient = False
 EmulationSpeed = {speed}
 FrameSkip = 0x00000000
-Overclock = 1.00000000
+Overclock = 0.75000000
 OverclockEnable = False
 GFXBackend = {gfx}
 GPUDeterminismMode = auto
 PerfMapDir =
-EnableCustomRTC = False
-CustomRTCValue = 0x386d4380
-AllowAllNetplayVersions = False
-QoSEnabled = True
-AdapterWarning = True
-ShownLagReductionWarning = False
 [Movie]
 PauseMovie = False
 Author =
 DumpFrames = False
-DumpFramesSilent = False
-ShowInputDisplay = False
-ShowRTC = False
+DumpFramesSilent = True
+ShowInputDisplay = True
 [DSP]
 EnableJIT = True
 DumpAudio = False
-DumpAudioSilent = False
 DumpUCode = False
 Backend = {audio}
-Volume = 100
+Volume = 50
 CaptureLog = False
 [Input]
 BackgroundInput = True
 [FifoPlayer]
 LoopReplay = True
+[NetPlay]
+Nickname = Player
+ConnectPort = 2626
+HostPort = 2626
+ListenPort = 0
 [Analytics]
-ID = 0
 Enabled = False
 PermissionAsked = True
-[Network]
-SSLDumpRead = False
-SSLDumpWrite = False
-SSLVerifyCert = False
-SSLDumpRootCA = False
-SSLDumpPeerCert = False
-[BluetoothPassthrough]
-Enabled = False
-VID = -1
-PID = -1
-LinkKeys =
-[Sysconf]
-SensorBarPosition = 1
-SensorBarSensitivity = 50331648
-SpeakerVolume = 88
-WiimoteMotor = True
-WiiLanguage = 1
-AspectRatio = 1
-Screensaver = 0
 """
 
 
@@ -254,19 +226,26 @@ def setup_melee_config(game_settings_directory):
         f.write(GALE01_INI)
 
 
-def setup_dolphin_user(user_directory=None,
+def setup_dolphin_user(in_directory=None,
                        player_stats=["human", "ai"],
                        render=True,
                        speed=0,
                        fullscreen=False,
                        audio=False):
+
+    in_directory = Path(in_directory)
+
+    user_directory = in_directory.joinpath("DolphinUser")
     config_directory = user_directory.joinpath("Config")
     game_settings_directory = user_directory.joinpath("GameSettings")
 
+    create_directory(in_directory)
     create_directory(user_directory)
     create_directory(config_directory)
     create_directory(game_settings_directory)
 
     #setup_pipe_config(config_directory, player_stats)
     #setup_dolphin_config(config_directory, user_directory, render, audio, speed, fullscreen, player_stats)
-    #setup_melee_config(game_settings_directory)
+    setup_melee_config(game_settings_directory)
+
+    return user_directory

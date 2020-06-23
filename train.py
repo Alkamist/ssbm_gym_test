@@ -14,13 +14,19 @@ from meleepy.melee import Melee
 
 if __name__ == "__main__":
     melee = Melee(
-        dolphin_path=None,
-        melee_iso_path=None,
-        player_stats=["human", "ai"],
+        dolphin_user_directory="C:\\Users\\Corey\\Documents\\Dolphin Emulator",
+        player_stats=["human", "human"],
         render=True,
         speed=1,
         fullscreen=False,
         audio=False,
     )
 
-    melee.reset()
+    melee._start_process()
+
+#    melee.reset()
+
+#    while True:
+#        state = melee.step()
+#
+#        #print(state.players[1].x)

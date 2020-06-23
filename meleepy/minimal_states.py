@@ -49,5 +49,13 @@ class MinimalGameState:
         self.stage_select_cursor_y = 0.0
         self.menu_state = enums.Menu.IN_GAME
         self.ready_to_start = False
-        self.players = [MinimalPlayerState() for _ in range(8)]
+        self.players = dict()
+        self.players[1] = MinimalPlayerState()
+        self.players[2] = MinimalPlayerState()
+        self.players[3] = MinimalPlayerState()
+        self.players[4] = MinimalPlayerState()
+        self.players[5] = MinimalPlayerState()
+        self.players[6] = MinimalPlayerState()
+        self.players[7] = MinimalPlayerState()
+        self.players[8] = MinimalPlayerState()
         self.projectiles = []

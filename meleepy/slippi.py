@@ -164,7 +164,7 @@ def parse_slippi_event(event_bytes, game_state):
             cursor = 0x2
             payload_size = event_bytes[1]
             num_commands = (payload_size - 1) // 3
-            for i in range(0, num_commands):
+            for _ in range(0, num_commands):
                 command, command_len = unpack(">bH", event_bytes[cursor:cursor+3])
                 game_state.event_size[command] = command_len+1
                 cursor += 3
@@ -364,8 +364,9 @@ class Slippi():
             msg = self.client.read_message()
             if msg:
                 if CommType(msg['type']) == CommType.REPLAY:
-                    event = msg['payload']['data']
-                    frame_ended = parse_slippi_event(event, game_state)
+                    frame_ended = True
+                    #event = msg['payload']['data']
+                    #frame_ended = parse_slippi_event(event, game_state)
 
                 # We can basically just ignore keepalives
                 elif CommType(msg['type']) == CommType.KEEPALIVE:
@@ -380,8 +381,8 @@ class Slippi():
 
                 # Handle menu-state event
                 elif CommType(msg['type']) == CommType.MENU:
-                    event = msg['payload']['data']
-                    parse_slippi_menu_event(event, game_state)
+                    #event = msg['payload']['data']
+                    #parse_slippi_menu_event(event, game_state)
                     frame_ended = True
 
         return game_state
